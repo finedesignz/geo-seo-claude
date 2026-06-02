@@ -55,7 +55,7 @@
 **Plans**: 4 plans
   - [x] 02-00-PLAN.md — Wave 0: @geo/fetch scaffold + undici/ipaddr.js + IP deny-list (SEC-01) + error model (SEC-05) + loopback test-server/mock-resolver helpers (Wave 0)
   - [x] 02-01-PLAN.md — createSafeFetcher: scheme/port allowlist + resolve-then-pin DNS + rebinding-safe happy path (SEC-01/02/05) (Wave 1)
-  - [ ] 02-02-PLAN.md — manual redirect loop with per-hop SSRF re-validation + hop cap + redirectChain (SEC-03/02/05) (Wave 2)
+  - [x] 02-02-PLAN.md — manual redirect loop with per-hop SSRF re-validation + hop cap + redirectChain (SEC-03/02/05) (Wave 2)
   - [ ] 02-03-PLAN.md — streamed size cap + decompression-bomb defense + exports/Fetcher-conformance phase gate (SEC-04/05) (Wave 3)
 
 ### Phase 3: Postgres Schema & Durable Job Queue
@@ -129,7 +129,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. @geo/core — Deterministic Package | 5/7 | In Progress|  |
-| 2. SSRF & Fetch Hardening | 0/4 | Planned | - |
+| 2. SSRF & Fetch Hardening | 3/4 | In Progress|  |
 | 3. Postgres Schema & Durable Job Queue | 0/0 | Not started | - |
 | 4. Worker Pipeline | 0/0 | Not started | - |
 | 5. Bun+Hono API Layer | 0/0 | Not started | - |
