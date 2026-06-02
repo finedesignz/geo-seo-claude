@@ -23,3 +23,6 @@ export { AI_CRAWLERS } from "./types.js";
 export { normalizeUrl } from "./url.js";
 
 export { checkRobots } from "./robots.js";
+
+export { generateLlmsTxt, validateLlmsTxt } from "./llmstxt.js";
+export type { CrawlData, CrawlPage, LlmsTxtValidationResult } from "./llmstxt.js";
