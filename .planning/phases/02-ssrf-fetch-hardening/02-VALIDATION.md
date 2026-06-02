@@ -41,9 +41,9 @@ created: 2026-06-02
 | 2-00-01 | 00 | 0 | infra | — | package scaffold + Fetcher type conformance | infra | `bun run --cwd packages/fetch test -- --run` | ❌ W0 | ⬜ pending |
 | 2-01-01 | 01 | 1 | SEC-01 | T-SSRF-IP | private/loopback/link-local/metadata IPs blocked post-DNS | unit | `bun run --cwd packages/fetch test ip` | ❌ W0 | ⬜ pending |
 | 2-02-01 | 02 | 1 | SEC-02 | T-REBIND | resolve-then-pin; rebinding TOCTOU blocked | integration | `bun run --cwd packages/fetch test rebind` | ❌ W0 | ⬜ pending |
-| 2-03-01 | 03 | 2 | SEC-03 | T-REDIRECT | each redirect hop re-validated; pivot-to-private blocked | integration | `bun run --cwd packages/fetch test redirect` | ❌ W0 | ⬜ pending |
-| 2-04-01 | 04 | 2 | SEC-04 | T-OVERSIZE/T-ZIPBOMB | size cap + decompression-bomb fail cleanly | integration | `bun run --cwd packages/fetch test size` | ❌ W0 | ⬜ pending |
-| 2-05-01 | 05 | 2 | SEC-05 | — | structured machine-readable error code on every block | unit | `bun run --cwd packages/fetch test errors` | ❌ W0 | ⬜ pending |
+| 2-02-01 | 02 | 2 | SEC-03 | T-REDIRECT | each redirect hop re-validated; pivot-to-private blocked | integration | `bun run --cwd packages/fetch test redirect` | ❌ W0 | ⬜ pending |
+| 2-03-01 | 03 | 3 | SEC-04 | T-OVERSIZE/T-ZIPBOMB | size cap + decompression-bomb fail cleanly | integration | `bun run --cwd packages/fetch test size` | ❌ W0 | ⬜ pending |
+| 2-03-02 | 03 | 3 | SEC-05 | — | structured machine-readable error code on every block | unit | `bun run --cwd packages/fetch test errors` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
