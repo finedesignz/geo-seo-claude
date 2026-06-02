@@ -145,7 +145,7 @@ describe("validateLlmsTxt", () => {
     const result = validateLlmsTxt(noTitle);
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors[0].toLowerCase()).toContain("title");
+    expect(result.errors[0]?.toLowerCase()).toContain("title");
   });
 
   it("returns valid:true for title-only text (A4: only title is mandatory)", () => {

@@ -31,8 +31,8 @@ describe("CITABILITY_WEIGHTS", () => {
   it("is frozen / not mutatable at runtime", () => {
     // `as const` gives readonly TS — we also freeze at runtime
     expect(() => {
-      // @ts-expect-error intentional mutation attempt
-      (CITABILITY_WEIGHTS as Record<string, number>).answer_block_quality = 999;
+      const w = CITABILITY_WEIGHTS as Record<string, number>;
+      w["answer_block_quality"] = 999;
     }).toThrow();
   });
 });
