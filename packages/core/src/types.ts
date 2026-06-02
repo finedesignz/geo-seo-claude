@@ -86,8 +86,10 @@ export interface CitabilityResult {
 }
 
 export interface RenderingResult {
-  rendering: "SSR" | "CSR" | "UNKNOWN";
+  rendering: "ssr" | "csr" | "hybrid";
   confidence: number;
   signals: string[];
+  wordCount: number;
+  scriptCount: number;
   errors: string[];
 }

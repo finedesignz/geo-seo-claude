@@ -31,3 +31,5 @@ export type { SchemaType, StructuredDataEntry, StructuredDataValidationResult } 
 
 export { computeCitabilityScore, scorePassage, CITABILITY_WEIGHTS } from "./citability.js";
 export type { CitabilityWeightKey, PageData, PassageResult, CitabilityResult } from "./citability.js";
+
+export { detectRendering, HYDRATION_MARKERS, FRAMEWORK_ROOT_PATTERN } from "./rendering.js";
