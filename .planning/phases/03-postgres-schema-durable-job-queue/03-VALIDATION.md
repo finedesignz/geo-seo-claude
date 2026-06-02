@@ -17,7 +17,7 @@ created: 2026-06-02
 
 No local Postgres, no Docker, no DATABASE_URL in this environment. Test strategy:
 - **PGlite** (`@electric-sql/pglite`) — real in-process WASM Postgres — runs migrations, schema, lifecycle (queued→running→done|failed), and lease-reclaim tests with REAL SQL, no Docker. Covers DATA-01/02/04 + reclaim at runtime now.
-- **True-concurrency SKIP LOCKED** (two sessions claiming, no double-claim) needs a multi-connection server → integration test is gated behind a real `DATABASE_URL` and skipped-with-reason when absent. Concurrency is proven against live Coolify Postgres in Phase 6 (DEPLOY-04). The claim query's structural correctness is asserted now (single-txn SELECT…FOR UPDATE SKIP LOCKED + atomic state update).
+- **True-concurrency SKIP LOCKED** (two sessions claiming, no double-claim) needs a multi-connection server → integration test is gated behind `TEST_DATABASE_URL` + `ALLOW_DB_TESTS=1` (never prod `DATABASE_URL`; reject non-test-looking DB names) and skipped-with-reason when absent. Concurrency is proven against live Coolify Postgres in Phase 6 (DEPLOY-04). The claim query's structural correctness is asserted now (single-txn SELECT…FOR UPDATE SKIP LOCKED + atomic state update).
 
 ---
 
