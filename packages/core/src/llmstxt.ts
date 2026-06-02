@@ -227,8 +227,8 @@ export function validateLlmsTxt(text: string): LlmsTxtValidationResult {
       const match = line.match(/^- \[([^\]]*)\]\(([^)]*)\)(?:: (.+))?$/);
       if (match) {
         currentSection.items.push({
-          title: match[1],
-          url: match[2],
+          title: match[1] ?? "",
+          url: match[2] ?? "",
           description: match[3],
         });
       }

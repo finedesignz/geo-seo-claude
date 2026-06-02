@@ -272,7 +272,7 @@ function extractJsonLdBlocks(html: string): { blocks: ParsedBlock[]; errors: str
   JSON_LD_SCRIPT_RE.lastIndex = 0;
 
   while ((match = JSON_LD_SCRIPT_RE.exec(html)) !== null) {
-    const raw = match[1].trim();
+    const raw = (match[1] ?? "").trim();
     if (!raw) continue;
 
     try {

@@ -13,7 +13,6 @@ export type {
   RobotsResult,
   LlmsTxtResult,
   SchemaTemplateResult,
-  CitabilityResult,
   RenderingResult,
 } from "./types.js";
 
