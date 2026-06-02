@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 Plan 00 complete (@geo/db scaffold, getSql guard, PGlite harness)
-last_updated: "2026-06-02T14:00:00.000Z"
+stopped_at: Phase 3 Plan 01 complete (migration runner + 0001_create_audits schema, DATA-04/DATA-01)
+last_updated: "2026-06-02T14:15:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 2
@@ -29,7 +29,7 @@ progress:
 Phase: 3 (postgres-schema-durable-job-queue) — EXECUTING
 Plan: 2 of 3
 **Phase:** 3 — Postgres Schema & Durable Job Queue — EXECUTING
-**Plan:** Plan 00 COMPLETE — @geo/db scaffold, getSql guard, PGlite harness
+**Plan:** Plan 01 COMPLETE — migration runner + 0001_create_audits schema (DATA-04, DATA-01)
 **Status:** Executing Phase 3
 **Branch:** phase-01-geo-core-deterministic-package
 
@@ -74,6 +74,7 @@ Progress: [█████████░] 91%
 | 02-02 manual redirects + per-hop SSRF | ~15 min | 2 | 5 |
 | 02-03 size cap + decompression-bomb + phase gate | ~15 min | 2 | 7 |
 | 03-00 @geo/db scaffold + getSql guard + PGlite harness | ~15 min | 3 | 11 |
+| 03-01 migration runner + 0001_create_audits schema | ~15 min | 2 | 5 |
 
 ---
 
@@ -124,8 +125,8 @@ None.
 ## Session Continuity
 
 **Last session:** 2026-06-02T14:00:00.000Z
-**Stopped at:** Phase 3 Plan 00 complete (@geo/db scaffold, getSql guard, PGlite harness, DATA-03)
-**Next action:** Phase 3 Plan 01 — idempotent migration runner + schema_migrations + 0001_create_audits.sql
+**Stopped at:** Phase 3 Plan 01 complete (migration runner + audits schema, DATA-04/DATA-01, 24 tests green)
+**Next action:** Phase 3 Plan 02 — DAL (claim/complete/fail query functions)
 
 ---
 *State initialized: 2026-06-01*
