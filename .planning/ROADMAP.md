@@ -56,7 +56,7 @@
   - [x] 02-00-PLAN.md — Wave 0: @geo/fetch scaffold + undici/ipaddr.js + IP deny-list (SEC-01) + error model (SEC-05) + loopback test-server/mock-resolver helpers (Wave 0)
   - [x] 02-01-PLAN.md — createSafeFetcher: scheme/port allowlist + resolve-then-pin DNS + rebinding-safe happy path (SEC-01/02/05) (Wave 1)
   - [x] 02-02-PLAN.md — manual redirect loop with per-hop SSRF re-validation + hop cap + redirectChain (SEC-03/02/05) (Wave 2)
-  - [ ] 02-03-PLAN.md — streamed size cap + decompression-bomb defense + exports/Fetcher-conformance phase gate (SEC-04/05) (Wave 3)
+  - [x] 02-03-PLAN.md — streamed size cap + decompression-bomb defense + exports/Fetcher-conformance phase gate (SEC-04/05) (Wave 3)
 
 ### Phase 3: Postgres Schema & Durable Job Queue
 **Goal**: Audit jobs and results are durably stored in Coolify Postgres with a versioned schema and a correct SKIP LOCKED job queue that survives service restarts.

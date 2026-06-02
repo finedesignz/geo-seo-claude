@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 Plan 01 complete (createSafeFetcher, resolve-then-pin, SEC-01/02/05)
-last_updated: "2026-06-02T20:11:47.146Z"
+stopped_at: Phase 2 Plan 03 complete (size cap + decompression-bomb + Fetcher-conformance gate, SEC-04/05)
+last_updated: "2026-06-02T20:17:44.672Z"
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 11
-  completed_plans: 10
-  percent: 14
+  completed_plans: 11
+  percent: 29
 ---
 
 # Project State: geo-api
@@ -29,8 +29,8 @@ progress:
 Phase: 2 (ssrf-fetch-hardening) — EXECUTING
 Plan: 1 of 4
 **Phase:** 2 — SSRF & Fetch Hardening — EXECUTING
-**Plan:** Plan 01 COMPLETE — createSafeFetcher, resolve-then-pin, scheme/port blocks
-**Status:** Executing Phase 2, Plan 02 next
+**Plan:** Plan 03 COMPLETE — size cap, decompression-bomb defense, Fetcher-conformance gate
+**Status:** Executing Phase 2, Plan 04 next (phase gate / final)
 **Branch:** phase-01-geo-core-deterministic-package
 
 ```
@@ -71,6 +71,8 @@ Progress: [█████████░] 91%
 | 01-06 phase gate + dual ESM/CJS | ~15 min | 3 | 10 |
 | 02-00 @geo/fetch scaffold + IP classifier | ~10 min | 2 | 11 |
 | 02-01 createSafeFetcher + resolve-then-pin | ~20 min | 2 | 6 |
+| 02-02 manual redirects + per-hop SSRF | ~15 min | 2 | 5 |
+| 02-03 size cap + decompression-bomb + phase gate | ~15 min | 2 | 7 |
 
 ---
 
@@ -94,6 +96,9 @@ Progress: [█████████░] 91%
 - Direct IP literals (decimal/octal/hex/IPv4-mapped IPv6) detected and blocked without DNS round-trip
 - _testDispatcher seam in SafeFetcherOptions: post-validation only; resolveAndValidate always runs in production
 - `callback_url` webhook uses same SSRF guard as audit URL
+- makeByteCounter placed after final decompressor so cap is on decompressed bytes (02-03)
+- stacked encoding cap is 2; enforced synchronously in buildDecompressChain before streaming (02-03)
+- tsconfig.check.json created (rootDir='.') for tsc --noEmit including test helpers (02-03)
 - Flask CRM (`scripts/webapp/app.py`) untouched this milestone
 
 ### Architecture Pointers
