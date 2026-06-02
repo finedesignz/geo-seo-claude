@@ -13,7 +13,6 @@ export type {
   RobotsResult,
   LlmsTxtResult,
   SchemaTemplateResult,
-  StructuredDataValidationResult,
   CitabilityResult,
   RenderingResult,
 } from "./types.js";
@@ -26,3 +25,6 @@ export { checkRobots } from "./robots.js";
 
 export { generateLlmsTxt, validateLlmsTxt } from "./llmstxt.js";
 export type { CrawlData, CrawlPage, LlmsTxtValidationResult } from "./llmstxt.js";
+
+export { getSchemaTemplates, validateStructuredData, SCHEMA_TYPES, MAX_HTML_BYTES } from "./schema.js";
+export type { SchemaType, StructuredDataEntry, StructuredDataValidationResult } from "./schema.js";
