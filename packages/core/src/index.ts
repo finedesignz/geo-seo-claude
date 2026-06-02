@@ -28,3 +28,6 @@ export type { CrawlData, CrawlPage, LlmsTxtValidationResult } from "./llmstxt.js
 
 export { getSchemaTemplates, validateStructuredData, SCHEMA_TYPES, MAX_HTML_BYTES } from "./schema.js";
 export type { SchemaType, StructuredDataEntry, StructuredDataValidationResult } from "./schema.js";
+
+export { computeCitabilityScore, scorePassage, CITABILITY_WEIGHTS } from "./citability.js";
+export type { CitabilityWeightKey, PageData, PassageResult, CitabilityResult } from "./citability.js";
