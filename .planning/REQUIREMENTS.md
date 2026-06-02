@@ -20,10 +20,10 @@ Zero-dependency TypeScript package of deterministic functions. Imported inline b
 
 Prerequisite — nothing that accepts a URL ships before this.
 
-- [ ] **SEC-01**: URL fetcher blocks private, link-local, loopback, and cloud-metadata IPs (e.g. 169.254.169.254) including after DNS resolution
+- [x] **SEC-01**: URL fetcher blocks private, link-local, loopback, and cloud-metadata IPs (e.g. 169.254.169.254) including after DNS resolution
 - [x] **SEC-02**: URL fetcher is DNS-rebinding safe (resolve-then-pin, re-validate on redirect)
 - [x] **SEC-03**: URL fetcher validates and re-checks every redirect hop against the SSRF allowlist
-- [ ] **SEC-04**: URL fetcher enforces a response-size cap and is decompression-bomb safe
+- [x] **SEC-04**: URL fetcher enforces a response-size cap and is decompression-bomb safe
 - [x] **SEC-05**: An SSRF-blocked or oversized fetch fails the job with a clear, structured error (no partial/unsafe result)
 
 ### Scoring
@@ -106,10 +106,10 @@ Prerequisite — nothing that accepts a URL ships before this.
 | CORE-04 | Phase 1: @geo/core — Deterministic Package | Complete |
 | CORE-05 | Phase 1: @geo/core — Deterministic Package | Complete |
 | CORE-06 | Phase 1: @geo/core — Deterministic Package | Complete |
-| SEC-01 | Phase 2: SSRF & Fetch Hardening | Pending |
+| SEC-01 | Phase 2: SSRF & Fetch Hardening | Complete |
 | SEC-02 | Phase 2: SSRF & Fetch Hardening | Complete |
 | SEC-03 | Phase 2: SSRF & Fetch Hardening | Complete |
-| SEC-04 | Phase 2: SSRF & Fetch Hardening | Pending |
+| SEC-04 | Phase 2: SSRF & Fetch Hardening | Complete |
 | SEC-05 | Phase 2: SSRF & Fetch Hardening | Complete |
 | DATA-01 | Phase 3: Postgres Schema & Durable Job Queue | Pending |
 | DATA-02 | Phase 3: Postgres Schema & Durable Job Queue | Pending |
