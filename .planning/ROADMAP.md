@@ -9,7 +9,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: @geo/core — Deterministic Package** - Zero-dep TS package with all deterministic audit functions (crawl, llms.txt, schema, citability, SSR/CSR detection), usable by HOW and the service
+- [x] **Phase 1: @geo/core — Deterministic Package** - Zero-dep TS package with all deterministic audit functions (crawl, llms.txt, schema, citability, SSR/CSR detection), usable by HOW and the service
 - [ ] **Phase 2: SSRF & Fetch Hardening** - Harden URL fetcher to block SSRF vectors, DNS-rebinding, redirect chains, size caps — prerequisite for all URL-accepting features
 - [ ] **Phase 3: Postgres Schema & Durable Job Queue** - Coolify Postgres schema with migration management, job state machine, and SKIP LOCKED worker queue
 - [ ] **Phase 4: Worker Pipeline** - Background worker claiming jobs, running @geo/core deterministic checks + structured Anthropic SDK scoring call, persisting results
@@ -39,7 +39,7 @@
   - [x] 01-03-PLAN.md — CORE-03 getSchemaTemplates + zero-dep JSON-LD validateStructuredData (Wave 1)
   - [x] 01-04-PLAN.md — CORE-04 computeCitabilityScore + CITABILITY_WEIGHTS (TDD) (Wave 1)
   - [x] 01-05-PLAN.md — CORE-05 detectRendering multi-signal SSR/CSR (Wave 1)
-  - [ ] 01-06-PLAN.md — CORE-06 dual ESM+CJS consumability + zero-dep + full-suite phase gate (Wave 2)
+  - [x] 01-06-PLAN.md — CORE-06 dual ESM+CJS consumability + zero-dep + full-suite phase gate (Wave 2)
 
 ### Phase 2: SSRF & Fetch Hardening
 **Goal**: The URL fetch layer is hardened against SSRF, DNS-rebinding, redirect abuse, and response-size attacks before any URL is accepted over HTTP.

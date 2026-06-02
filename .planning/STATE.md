@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 Plan 05 complete (CORE-05 detectRendering)
-last_updated: "2026-06-02T20:30:00.000Z"
+stopped_at: Phase 1 Plan 06 complete (CORE-06 dual ESM+CJS phase gate)
+last_updated: "2026-06-02T21:00:00.000Z"
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
-  completed_plans: 6
-  percent: 0
+  completed_plans: 7
+  percent: 14
 ---
 
 # Project State: geo-api
@@ -26,15 +26,15 @@ progress:
 
 ## Current Position
 
-Phase: 1 (geo-core-deterministic-package) — EXECUTING
-Plan: 2 of 7
-**Phase:** 1 — @geo/core: Deterministic Package
-**Plan:** Plan 00 COMPLETE — Plan 01 next
-**Status:** Executing Phase 1
+Phase: 1 (geo-core-deterministic-package) — COMPLETE
+Plan: 7 of 7 (all plans complete)
+**Phase:** 1 — @geo/core: Deterministic Package — COMPLETE
+**Plan:** Plan 06 COMPLETE — Phase 1 gate satisfied
+**Status:** Phase 1 complete; Phase 2 next
 **Branch:** phase-01-geo-core-deterministic-package
 
 ```
-Progress: [███████░░░] 71%
+Progress: [██░░░░░░░░] 14%
            1   2   3   4   5   6   7
 ```
 
@@ -44,7 +44,7 @@ Progress: [███████░░░] 71%
 
 | # | Name | Status |
 |---|------|--------|
-| 1 | @geo/core — Deterministic Package | Plan 00 complete (walking skeleton) |
+| 1 | @geo/core — Deterministic Package | COMPLETE (Plans 00-06, CORE-01..06) |
 | 2 | SSRF & Fetch Hardening | Not started |
 | 3 | Postgres Schema & Durable Job Queue | Not started |
 | 4 | Worker Pipeline | Not started |
@@ -57,14 +57,18 @@ Progress: [███████░░░] 71%
 ## Performance Metrics
 
 - Phases completed: 0/7
-- Requirements shipped: 3/35 (CORE-06, CORE-02, CORE-05)
-- Plans executed: 1
+- Requirements shipped: 6/35 (CORE-01..06)
+- Plans executed: 7 (Phase 1 complete)
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | 01-00 Walking Skeleton | ~15 min | 2 | 15 |
+| 01-01 checkRobots | ~10 min | 1 | 3 |
 | 01-02 llmstxt generator/validator | ~5 min | 1 | 3 |
+| 01-03 schema templates + structured data | ~10 min | 1 | 4 |
+| 01-04 citability scoring | ~15 min | 1 | 4 |
 | 01-05 detectRendering SSR/CSR/hybrid | ~10 min | 1 | 4 |
+| 01-06 phase gate + dual ESM/CJS | ~15 min | 3 | 10 |
 
 ---
 
@@ -105,9 +109,9 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-06-02T19:20:26.435Z
-**Stopped at:** Phase 1 Plan 05 complete (CORE-05 detectRendering)
-**Next action:** Execute Plan 06 (CORE-06 dual ESM+CJS consumability + phase gate)
+**Last session:** 2026-06-02T21:00:00.000Z
+**Stopped at:** Phase 1 Plan 06 complete (CORE-06 phase gate — all 7 plans done)
+**Next action:** Phase 2 — SSRF & Fetch Hardening
 
 ---
 *State initialized: 2026-06-01*
