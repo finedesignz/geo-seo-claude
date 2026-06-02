@@ -1,12 +1,17 @@
 /**
- * @geo/fetch — createSafeFetcher (SEC-01, SEC-02, SEC-05)
+ * @geo/fetch — createSafeFetcher (SEC-01, SEC-02, SEC-03, SEC-05)
  *
  * Returns a Fetcher (url: string) => Promise<FetchResult> that:
  *   1. Parses the URL; rejects userinfo, non-http/https schemes, disallowed ports.
  *   2. Resolves ALL A+AAAA records and denies any blocked IP (SEC-01).
  *   3. Connects via undici to the PINNED validated IP with Host and TLS servername
  *      set to the original hostname — resolve-then-pin, NO second DNS lookup (SEC-02).
- *   4. Returns FetchResult with lowercased headers; never throws (SEC-05).
+ *   4. Follows redirects MANUALLY (redirect: 'manual'), re-running full SSRF validation
+ *      on EACH hop's Location target before connecting (SEC-03).
+ *      - Relative Location headers resolved against current URL before re-validation.
+ *      - Exceeding maxRedirects → TOO_MANY_REDIRECTS.
+ *      - Blocked hop target → REDIRECT_BLOCKED (chain carried).
+ *   5. Returns FetchResult with lowercased headers; never throws (SEC-05).
  *
  * Uses undici's `request` (NOT Bun's global fetch) to support custom connect
  * options for IP pinning. (Bun issue #27890 breaks HTTPS with custom lookup.)
@@ -57,6 +62,7 @@ export interface SafeFetcherOptions {
 
 const DEFAULT_ALLOWED_PORTS = [80, 443];
 const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_MAX_REDIRECTS = 5;
 const ALLOWED_SCHEMES = new Set(["http:", "https:"]);
 
 // ---------------------------------------------------------------------------
@@ -74,6 +80,90 @@ function effectivePort(url: URL): number {
 }
 
 // ---------------------------------------------------------------------------
+// Internal: validate a single URL and build a pinned request target
+// ---------------------------------------------------------------------------
+
+interface ValidationResult {
+  ok: true;
+  parsedUrl: URL;
+  pinnedIp: string;
+  hostHeader: string;
+}
+
+interface ValidationError {
+  ok: false;
+  code: FetchErrorCode;
+}
+
+async function validateUrl(
+  rawUrl: string,
+  allowedPorts: number[],
+  resolver: Resolver | undefined,
+): Promise<ValidationResult | ValidationError> {
+  // Parse URL
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(rawUrl);
+  } catch {
+    return { ok: false, code: FetchErrorCode.SSRF_BLOCKED_SCHEME };
+  }
+
+  // Deny userinfo (Pitfall 7 — userinfo@host trick)
+  if (parsedUrl.username !== "" || parsedUrl.password !== "") {
+    return { ok: false, code: FetchErrorCode.SSRF_BLOCKED_SCHEME };
+  }
+
+  // Scheme allowlist: http/https only
+  if (!ALLOWED_SCHEMES.has(parsedUrl.protocol)) {
+    return { ok: false, code: FetchErrorCode.SSRF_BLOCKED_SCHEME };
+  }
+
+  // Port allowlist
+  const port = effectivePort(parsedUrl);
+  if (!allowedPorts.includes(port)) {
+    return { ok: false, code: FetchErrorCode.SSRF_BLOCKED_PORT };
+  }
+
+  const originalHostname = parsedUrl.hostname;
+  const isIpLit = isDirectIpLiteral(originalHostname);
+
+  let pinnedIp: string;
+
+  if (isIpLit) {
+    const { isBlockedIP } = await import("./ip-validator.js");
+    const rawIp = originalHostname.startsWith("[")
+      ? originalHostname.slice(1, -1)
+      : originalHostname;
+
+    if (isBlockedIP(rawIp)) {
+      return { ok: false, code: FetchErrorCode.SSRF_BLOCKED_IP };
+    }
+    pinnedIp = rawIp;
+  } else {
+    let validatedIps: string[];
+    try {
+      validatedIps = await resolveAndValidate(originalHostname, resolver);
+    } catch (err) {
+      if (err instanceof DnsValidationError) {
+        return { ok: false, code: err.code };
+      }
+      return { ok: false, code: FetchErrorCode.DNS_RESOLUTION_FAILED };
+    }
+    const firstIp = validatedIps[0];
+    if (firstIp === undefined) {
+      return { ok: false, code: FetchErrorCode.DNS_RESOLUTION_FAILED };
+    }
+    pinnedIp = firstIp;
+  }
+
+  const originalPort = parsedUrl.port;
+  const hostHeader =
+    originalPort !== "" ? `${originalHostname}:${originalPort}` : originalHostname;
+
+  return { ok: true, parsedUrl, pinnedIp, hostHeader };
+}
+
+// ---------------------------------------------------------------------------
 // createSafeFetcher
 // ---------------------------------------------------------------------------
 
@@ -83,142 +173,131 @@ function effectivePort(url: URL): number {
 export function createSafeFetcher(options: SafeFetcherOptions = {}): (url: string) => Promise<FetchResult> {
   const allowedPorts = options.allowedPorts ?? DEFAULT_ALLOWED_PORTS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   const resolver = options.resolver;
   const testDispatcher = options._testDispatcher;
 
   return async function safeFetch(rawUrl: string): Promise<FetchResult> {
-    // -------------------------------------------------------------------------
-    // 1. Parse URL
-    // -------------------------------------------------------------------------
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(rawUrl);
-    } catch {
-      return buildErrorResult(rawUrl, FetchErrorCode.SSRF_BLOCKED_SCHEME);
-    }
+    const redirectChain: Array<{ url: string; status: number }> = [];
+    let currentUrl = rawUrl;
 
     // -------------------------------------------------------------------------
-    // 2. Deny userinfo (Pitfall 7 — userinfo@host trick)
+    // Manual redirect loop (SEC-03)
+    // Each iteration validates the current hop URL before connecting.
     // -------------------------------------------------------------------------
-    if (parsedUrl.username !== "" || parsedUrl.password !== "") {
-      return buildErrorResult(rawUrl, FetchErrorCode.SSRF_BLOCKED_SCHEME);
-    }
+    for (;;) {
+      // -----------------------------------------------------------------------
+      // Validate current hop URL (full SSRF validation per hop)
+      // -----------------------------------------------------------------------
+      const validation = await validateUrl(currentUrl, allowedPorts, resolver);
 
-    // -------------------------------------------------------------------------
-    // 3. Scheme allowlist: http/https only
-    // -------------------------------------------------------------------------
-    if (!ALLOWED_SCHEMES.has(parsedUrl.protocol)) {
-      return buildErrorResult(rawUrl, FetchErrorCode.SSRF_BLOCKED_SCHEME);
-    }
-
-    // -------------------------------------------------------------------------
-    // 4. Port allowlist
-    // -------------------------------------------------------------------------
-    const port = effectivePort(parsedUrl);
-    if (!allowedPorts.includes(port)) {
-      return buildErrorResult(rawUrl, FetchErrorCode.SSRF_BLOCKED_PORT);
-    }
-
-    // -------------------------------------------------------------------------
-    // 5. Resolve-then-validate (SEC-01, SEC-02)
-    //    The hostname might be an IP literal — handle both cases.
-    // -------------------------------------------------------------------------
-    const originalHostname = parsedUrl.hostname;
-
-    // Check if the hostname is already an IP literal
-    // (isBlockedIP returns true for private IPs — we also use it here to detect literals)
-    const isIpLiteral = isDirectIpLiteral(originalHostname);
-
-    let pinnedIp: string;
-
-    if (isIpLiteral) {
-      // IP literal: skip DNS, validate directly
-      const { isBlockedIP } = await import("./ip-validator.js");
-      // Strip brackets from IPv6 literals
-      const rawIp = originalHostname.startsWith("[")
-        ? originalHostname.slice(1, -1)
-        : originalHostname;
-
-      if (isBlockedIP(rawIp)) {
-        return buildErrorResult(rawUrl, FetchErrorCode.SSRF_BLOCKED_IP);
-      }
-      pinnedIp = rawIp;
-    } else {
-      // Hostname: resolve ALL A+AAAA records and validate
-      let validatedIps: string[];
-      try {
-        validatedIps = await resolveAndValidate(originalHostname, resolver);
-      } catch (err) {
-        if (err instanceof DnsValidationError) {
-          return buildErrorResult(rawUrl, err.code);
+      if (!validation.ok) {
+        // If we are past the first hop, this is a redirect-blocked event
+        if (redirectChain.length > 0) {
+          return buildErrorResult(rawUrl, FetchErrorCode.REDIRECT_BLOCKED, redirectChain);
         }
-        return buildErrorResult(rawUrl, FetchErrorCode.DNS_RESOLUTION_FAILED);
+        return buildErrorResult(rawUrl, validation.code);
       }
-      // Pin to the first validated IP (connection will use this exact IP).
-      // validatedIps is guaranteed non-empty by resolveAndValidate.
-      const firstIp = validatedIps[0];
-      if (firstIp === undefined) {
-        return buildErrorResult(rawUrl, FetchErrorCode.DNS_RESOLUTION_FAILED);
-      }
-      pinnedIp = firstIp;
-    }
 
-    // -------------------------------------------------------------------------
-    // 6. Build pinned request URL
-    //    Replace hostname with pinned IP; set Host header to original host.
-    //    For IPv6, bracket the address in the URL.
-    // -------------------------------------------------------------------------
-    const isIpv6 = pinnedIp.includes(":");
-    const urlHostWithIp = isIpv6 ? `[${pinnedIp}]` : pinnedIp;
-
-    // Reconstruct URL pointing to the pinned IP
-    const pinnedUrl = new URL(rawUrl);
-    pinnedUrl.hostname = urlHostWithIp;
-
-    // Original host:port for the Host header (omit default ports)
-    const originalPort = parsedUrl.port;
-    const hostHeader =
-      originalPort !== "" ? `${originalHostname}:${originalPort}` : originalHostname;
-
-    // -------------------------------------------------------------------------
-    // 7. Execute pinned undici request (resolve-then-pin — NO second DNS lookup)
-    //    connect.servername preserves TLS SNI against the original hostname.
-    //    connect.rejectUnauthorized stays true (default) — never bypass certs.
-    // -------------------------------------------------------------------------
-    let dispatcher: Dispatcher | undefined;
-
-    if (testDispatcher) {
-      // Test seam: provided dispatcher routes the request to the test server.
-      // IP validation has ALREADY run above — the seam is post-validation only.
-      dispatcher = testDispatcher;
-    } else {
-      // Production: create an Agent that connects to the pinned IP with correct SNI.
-      dispatcher = new Agent({
-        connect: {
-          // Preserve TLS SNI to match the certificate (T-02-09)
-          servername: originalHostname,
-          // rejectUnauthorized defaults to true — do not disable
-        },
-      });
-    }
-
-    try {
-      const response = await request(
-        testDispatcher ? rawUrl : pinnedUrl.toString(),
-        {
-          method: "GET",
-          headers: {
-            host: hostHeader,
-          },
-          dispatcher,
-          headersTimeout: timeoutMs,
-          bodyTimeout: timeoutMs,
-          // Wave 1: no redirect following. undici request() default is 0 redirects.
-        },
-      );
+      const { parsedUrl, pinnedIp, hostHeader } = validation;
 
       // -----------------------------------------------------------------------
-      // 8. Build FetchResult — lowercase all header keys
+      // Build pinned request URL
+      // -----------------------------------------------------------------------
+      const isIpv6 = pinnedIp.includes(":");
+      const urlHostWithIp = isIpv6 ? `[${pinnedIp}]` : pinnedIp;
+
+      const pinnedUrl = new URL(currentUrl);
+      pinnedUrl.hostname = urlHostWithIp;
+
+      // -----------------------------------------------------------------------
+      // Build dispatcher
+      // -----------------------------------------------------------------------
+      let dispatcher: Dispatcher | undefined;
+
+      if (testDispatcher) {
+        dispatcher = testDispatcher;
+      } else {
+        dispatcher = new Agent({
+          connect: {
+            servername: parsedUrl.hostname,
+          },
+        });
+      }
+
+      // -----------------------------------------------------------------------
+      // Execute pinned undici request — redirect: 'manual' stops auto-follow
+      // -----------------------------------------------------------------------
+      let response: Awaited<ReturnType<typeof request>>;
+      try {
+        response = await request(
+          testDispatcher ? currentUrl : pinnedUrl.toString(),
+          {
+            method: "GET",
+            headers: {
+              host: hostHeader,
+            },
+            dispatcher,
+            headersTimeout: timeoutMs,
+            bodyTimeout: timeoutMs,
+            // undici request() default is 0 auto-redirections; no option needed (SEC-03)
+          },
+        );
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (
+          errMsg.includes("timeout") ||
+          errMsg.includes("Timeout") ||
+          errMsg.includes("UND_ERR_HEADERS_TIMEOUT") ||
+          errMsg.includes("UND_ERR_BODY_TIMEOUT")
+        ) {
+          return buildErrorResult(rawUrl, FetchErrorCode.CONNECT_TIMEOUT, redirectChain);
+        }
+        return buildErrorResult(rawUrl, FetchErrorCode.FETCH_ERROR, redirectChain);
+      }
+
+      const status = response.statusCode;
+
+      // -----------------------------------------------------------------------
+      // Handle 3xx redirects
+      // -----------------------------------------------------------------------
+      if (status >= 300 && status <= 399) {
+        // Record this hop
+        redirectChain.push({ url: currentUrl, status });
+
+        // Enforce redirect cap BEFORE attempting the next hop
+        if (redirectChain.length >= maxRedirects) {
+          // Drain body to avoid connection leak
+          try { await response.body.dump(); } catch { /* ignore */ }
+          return buildErrorResult(rawUrl, FetchErrorCode.TOO_MANY_REDIRECTS, redirectChain);
+        }
+
+        // Extract Location header
+        const location = response.headers["location"];
+        const locationStr = Array.isArray(location) ? location[0] : location;
+
+        if (!locationStr) {
+          // 3xx with no Location — treat as fetch error
+          try { await response.body.dump(); } catch { /* ignore */ }
+          return buildErrorResult(rawUrl, FetchErrorCode.FETCH_ERROR, redirectChain);
+        }
+
+        // Drain body before following redirect
+        try { await response.body.dump(); } catch { /* ignore */ }
+
+        // Resolve relative Location against current URL (SEC-03 anti-pattern fix)
+        try {
+          currentUrl = new URL(locationStr, currentUrl).href;
+        } catch {
+          return buildErrorResult(rawUrl, FetchErrorCode.FETCH_ERROR, redirectChain);
+        }
+
+        // Loop: re-validate next hop
+        continue;
+      }
+
+      // -----------------------------------------------------------------------
+      // Non-redirect response — build FetchResult
       // -----------------------------------------------------------------------
       const headers: Record<string, string> = {};
       const rawHeaders = response.headers;
@@ -237,24 +316,12 @@ export function createSafeFetcher(options: SafeFetcherOptions = {}): (url: strin
 
       return {
         url: rawUrl,
-        status: response.statusCode,
+        status,
         headers,
         body,
-        redirectChain: [],
+        redirectChain,
         error: undefined,
       };
-    } catch (err) {
-      // Timeout detection
-      const errMsg = err instanceof Error ? err.message : String(err);
-      if (
-        errMsg.includes("timeout") ||
-        errMsg.includes("Timeout") ||
-        errMsg.includes("UND_ERR_HEADERS_TIMEOUT") ||
-        errMsg.includes("UND_ERR_BODY_TIMEOUT")
-      ) {
-        return buildErrorResult(rawUrl, FetchErrorCode.CONNECT_TIMEOUT);
-      }
-      return buildErrorResult(rawUrl, FetchErrorCode.FETCH_ERROR);
     }
   };
 }
