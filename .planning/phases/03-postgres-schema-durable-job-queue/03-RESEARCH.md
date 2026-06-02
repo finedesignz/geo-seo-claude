@@ -544,17 +544,11 @@ expect(new Set(ids).size).toBe(ids.length); // no duplicates
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Coolify dev Postgres for test `DATABASE_URL`**
-   - What we know: Docker not installed locally; Coolify Postgres will be provisioned in Phase 6
-   - What's unclear: Whether a dev/test Postgres instance is already available at Coolify, or the team uses a local `pg` install
-   - Recommendation: Planner should add a Wave 0 task: "Provision or identify a `DATABASE_URL` for integration tests (separate from prod DB)". A `docker run postgres:16` one-liner in the test README covers the Docker-present case.
+1. **Coolify dev Postgres for test `DATABASE_URL`** — **RESOLVED:** No dev Postgres/Docker available locally. Test strategy uses PGlite (`@electric-sql/pglite`) for all runnable migrate/schema/lifecycle/reclaim tests; the true-concurrency SKIP LOCKED test is gated behind a real `DATABASE_URL` (skipped-with-reason when absent) per `03-VALIDATION.md`, and concurrency is proven against live Coolify Postgres in Phase 6 (DEPLOY-04). No Wave 0 provisioning task needed.
 
-2. **`findings` jsonb shape**
-   - What we know: D-06 specifies `findings jsonb null`; `@geo/core` has result types
-   - What's unclear: Exact TypeScript type for `FindingsShape` — should `@geo/db` import `@geo/core` types or re-declare?
-   - Recommendation: Import `@geo/core` findings types in `@geo/db` types.ts (same monorepo workspace); avoid duplication.
+2. **`findings` jsonb shape** — **RESOLVED:** `@geo/db` imports `@geo/core` result types (same monorepo workspace); does NOT re-declare. Enforced in Plan 03-02 Task 1 action.
 
 ---
 

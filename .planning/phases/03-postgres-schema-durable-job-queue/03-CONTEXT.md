@@ -25,7 +25,7 @@ Covers DATA-01, DATA-02, DATA-03, DATA-04, WORK-01. Does NOT include: the worker
 
 ### Schema (DATA-01/02)
 - **D-06:** `audits` table: `id uuid pk default gen_random_uuid()`, `url text`, `normalized_url text`, `url_hash text` (for dedup lookups, Phase 5 API-04), `status` (enum/text-check: `queued|running|done|failed`), `score int null` (0–100), `findings jsonb null`, `error_code text null`, `callback_url text null`, `attempts int default 0`, `locked_at timestamptz null`, `lease_expires_at timestamptz null`, `created_at timestamptz default now()`, `updated_at timestamptz default now()`, `started_at timestamptz null`, `finished_at timestamptz null`. (recommended)
-- **D-07:** Status modeled as a CHECK-constrained text column (not a native enum) for easy additive evolution; an `updated_at` trigger keeps the timestamp fresh. Indexes: partial index on `(status)` where `status='queued'` for the claim query, index on `url_hash` for dedup. (recommended)
+- **D-07:** Status modeled as a CHECK-constrained text column (not a native enum) for easy additive evolution; an `updated_at` trigger keeps the timestamp fresh. Indexes: partial index on `(created_at)` WHERE `status='queued'` (the claim query's `ORDER BY created_at` benefits — status is already pinned by the WHERE clause), index on `url_hash` for dedup. (recommended)
 
 ### Queue (WORK-01 + DATA-02)
 - **D-08:** Claim = `SELECT … FROM audits WHERE status='queued' [AND lease expired reclaim] ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`, then within the same transaction set `status='running', locked_at=now(), lease_expires_at=now()+interval, started_at=now(), attempts=attempts+1`. No Redis/Celery broker. (recommended — WORK-01)
