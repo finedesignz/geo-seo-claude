@@ -98,17 +98,51 @@ Prerequisite — nothing that accepts a URL ships before this.
 
 ## Traceability
 
-Populated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (to be mapped by roadmapper) | — | Pending |
+| CORE-01 | Phase 1: @geo/core — Deterministic Package | Pending |
+| CORE-02 | Phase 1: @geo/core — Deterministic Package | Pending |
+| CORE-03 | Phase 1: @geo/core — Deterministic Package | Pending |
+| CORE-04 | Phase 1: @geo/core — Deterministic Package | Pending |
+| CORE-05 | Phase 1: @geo/core — Deterministic Package | Pending |
+| CORE-06 | Phase 1: @geo/core — Deterministic Package | Pending |
+| SEC-01 | Phase 2: SSRF & Fetch Hardening | Pending |
+| SEC-02 | Phase 2: SSRF & Fetch Hardening | Pending |
+| SEC-03 | Phase 2: SSRF & Fetch Hardening | Pending |
+| SEC-04 | Phase 2: SSRF & Fetch Hardening | Pending |
+| SEC-05 | Phase 2: SSRF & Fetch Hardening | Pending |
+| DATA-01 | Phase 3: Postgres Schema & Durable Job Queue | Pending |
+| DATA-02 | Phase 3: Postgres Schema & Durable Job Queue | Pending |
+| DATA-03 | Phase 3: Postgres Schema & Durable Job Queue | Pending |
+| DATA-04 | Phase 3: Postgres Schema & Durable Job Queue | Pending |
+| WORK-01 | Phase 3: Postgres Schema & Durable Job Queue | Pending |
+| SCORE-01 | Phase 4: Worker Pipeline | Pending |
+| SCORE-02 | Phase 4: Worker Pipeline | Pending |
+| SCORE-03 | Phase 4: Worker Pipeline | Pending |
+| SCORE-04 | Phase 4: Worker Pipeline | Pending |
+| WORK-02 | Phase 4: Worker Pipeline | Pending |
+| WORK-03 | Phase 4: Worker Pipeline | Pending |
+| WORK-04 | Phase 4: Worker Pipeline | Pending |
+| API-01 | Phase 5: Bun+Hono API Layer | Pending |
+| API-02 | Phase 5: Bun+Hono API Layer | Pending |
+| API-03 | Phase 5: Bun+Hono API Layer | Pending |
+| API-04 | Phase 5: Bun+Hono API Layer | Pending |
+| API-05 | Phase 5: Bun+Hono API Layer | Pending |
+| API-06 | Phase 5: Bun+Hono API Layer | Pending |
+| API-07 | Phase 5: Bun+Hono API Layer | Pending |
+| API-08 | Phase 5: Bun+Hono API Layer | Pending |
+| DEPLOY-01 | Phase 6: Containerize & Coolify Deploy | Pending |
+| DEPLOY-03 | Phase 6: Containerize & Coolify Deploy | Pending |
+| DEPLOY-04 | Phase 6: Containerize & Coolify Deploy | Pending |
+| DEPLOY-02 | Phase 7: Cron + Consumer Wiring | Pending |
+| CONS-01 | Phase 7: Cron + Consumer Wiring | Pending |
+| CONS-02 | Phase 7: Cron + Consumer Wiring | Pending |
 
 **Coverage:**
 - v1 requirements: 35 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 35 ⚠️
+- Mapped to phases: 35 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-06-01*
-*Last updated: 2026-06-01 after initial definition*
+*Last updated: 2026-06-01 — traceability populated by roadmapper*
