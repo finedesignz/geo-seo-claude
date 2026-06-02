@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 Plan 06 complete (CORE-06 dual ESM+CJS phase gate)
-last_updated: "2026-06-02T21:00:00.000Z"
+stopped_at: Phase 2 Plan 00 complete (@geo/fetch scaffold — SEC-01 IP classifier + SEC-05 error model)
+last_updated: "2026-06-02T21:30:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 7
-  completed_plans: 7
-  percent: 14
+  total_plans: 11
+  completed_plans: 8
+  percent: 18
 ---
 
 # Project State: geo-api
@@ -26,15 +26,15 @@ progress:
 
 ## Current Position
 
-Phase: 1 (geo-core-deterministic-package) — COMPLETE
-Plan: 7 of 7 (all plans complete)
-**Phase:** 1 — @geo/core: Deterministic Package — COMPLETE
-**Plan:** Plan 06 COMPLETE — Phase 1 gate satisfied
-**Status:** Phase 1 complete; Phase 2 next
+Phase: 2 (ssrf-fetch-hardening) — EXECUTING
+Plan: 1 of 4
+**Phase:** 2 — SSRF & Fetch Hardening — EXECUTING
+**Plan:** Plan 00 COMPLETE — @geo/fetch scaffold, IP classifier, error model
+**Status:** Executing Phase 2, Plan 01 next
 **Branch:** phase-01-geo-core-deterministic-package
 
 ```
-Progress: [██░░░░░░░░] 14%
+Progress: [██░░░░░░░░] 18%
            1   2   3   4   5   6   7
 ```
 
@@ -45,7 +45,7 @@ Progress: [██░░░░░░░░] 14%
 | # | Name | Status |
 |---|------|--------|
 | 1 | @geo/core — Deterministic Package | COMPLETE (Plans 00-06, CORE-01..06) |
-| 2 | SSRF & Fetch Hardening | Not started |
+| 2 | SSRF & Fetch Hardening | EXECUTING (Plan 00 done) |
 | 3 | Postgres Schema & Durable Job Queue | Not started |
 | 4 | Worker Pipeline | Not started |
 | 5 | Bun+Hono API Layer | Not started |
@@ -58,7 +58,7 @@ Progress: [██░░░░░░░░] 14%
 
 - Phases completed: 0/7
 - Requirements shipped: 6/35 (CORE-01..06)
-- Plans executed: 7 (Phase 1 complete)
+- Plans executed: 8 (Phase 1 complete, Phase 2 Plan 00 done)
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
@@ -69,6 +69,7 @@ Progress: [██░░░░░░░░] 14%
 | 01-04 citability scoring | ~15 min | 1 | 4 |
 | 01-05 detectRendering SSR/CSR/hybrid | ~10 min | 1 | 4 |
 | 01-06 phase gate + dual ESM/CJS | ~15 min | 3 | 10 |
+| 02-00 @geo/fetch scaffold + IP classifier | ~10 min | 2 | 11 |
 
 ---
 
@@ -85,6 +86,9 @@ Progress: [██░░░░░░░░] 14%
 - `@geo/core` lives in/alongside HOW's packages; ottolax consumes via HTTP only
 - Job queue = Postgres `SELECT FOR UPDATE SKIP LOCKED` (no Redis/Celery)
 - SSRF hardening is a hard prerequisite before any URL-accepting feature ships
+- isBlockedIP strategy: deny range() !== "unicast" (fail-closed D-04); ipaddr.js 2.4.0 normalizes obfuscated forms
+- IPv4-mapped IPv6 unwrapped via isIPv4MappedAddress()+toIPv4Address() before range check (T-02-01)
+- FetchErrorCode as const object not enum (avoids TS const-enum cross-module pitfall)
 - `callback_url` webhook uses same SSRF guard as audit URL
 - Flask CRM (`scripts/webapp/app.py`) untouched this milestone
 
@@ -109,9 +113,9 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-06-02T21:00:00.000Z
-**Stopped at:** Phase 1 Plan 06 complete (CORE-06 phase gate — all 7 plans done)
-**Next action:** Phase 2 — SSRF & Fetch Hardening
+**Last session:** 2026-06-02T21:30:00.000Z
+**Stopped at:** Phase 2 Plan 00 complete (@geo/fetch scaffold — IP classifier + error model)
+**Next action:** Phase 2 Plan 01 — createSafeFetcher network implementation (Wave 1)
 
 ---
 *State initialized: 2026-06-01*
