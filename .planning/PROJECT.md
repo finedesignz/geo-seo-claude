@@ -6,7 +6,7 @@
 
 ## Core Value
 
-**Any consumer app can POST a URL and reliably get back a 0–100 GEO Score with findings — fully automated, no human in the loop.**
+**Any consumer app can POST a URL and reliably get back a 0–100 GEO Score with findings — fully automated, no human in the loop.** The deterministic ~80% of an audit (crawl/robots, llms.txt, schema templates, SSR/CSR detection, citability heuristics) is plain code in a shared package; only the irreducible judgment is a single structured LLM call.
 
 ## Requirements
 
@@ -25,12 +25,11 @@
 
 <!-- New scope for the geo-api milestone. Hypotheses until shipped + validated. -->
 
-- [ ] De-risk spike: prove headless `claude -p` runs inside a container using the local Claude **subscription** (not an API key) and returns a GEO score
-- [ ] Harden `scripts/fetch_page.py` against SSRF (block private/link-local IPs, validate redirects) and add response-size caps before any URL is exposed to the network
-- [ ] FastAPI service exposing `POST /audit {url}` → `{job_id}` (async job model)
+- [ ] Shared **`@geo/core`** package holding the deterministic ~80% as zero-dep plain functions: crawl/robots check, llms.txt generation, schema.org templates, citability heuristic, SSR/CSR detection. Imported by BOTH the service and `../hyperoptimizedwebsites` (no per-audit LLM call for deterministic checks; HOW can run cheap checks inline without round-tripping the service)
+- [ ] Harden URL fetching against SSRF (block private/link-local/cloud-metadata IPs, validate redirects, DNS-rebind safe) and add response-size/decompression caps before any URL is exposed to the network
+- [ ] Service exposing `POST /audit {url}` → `{job_id}` (async job model)
 - [ ] `GET /audit/{job_id}` → status + 0–100 GEO Score + findings
-- [ ] Scoring/synthesis step runs headless via `claude -p` on the local subscription
-- [ ] Reuse existing `scripts/*.py` scrapers in-process — do NOT rewrite them
+- [ ] Scoring = a single **structured Anthropic SDK call** with a JSON output schema + prompt caching (NOT `claude -p`, NOT an agent host). Deterministic findings feed the prompt; the LLM only renders the irreducible judgment into the score
 - [ ] Persist audit jobs + history in **Coolify Postgres** (replacing racy `~/.geo-prospects/*.json` writes)
 - [ ] Expose `/openapi.json` + `/docs` (scalar-fastapi) per docs standard (global rule 21)
 - [ ] Containerize and deploy as a standalone service on **Coolify**
@@ -42,7 +41,8 @@
 
 - Rewriting the existing scrapers — reuse as-is; only `fetch_page.py` gets security hardening — *avoid churn / preserve working behavior*
 - Migrating or replacing the Flask CRM (`scripts/webapp/app.py`) — *keep as-is for now; may fold into the service in a later milestone*
-- Using the Anthropic API key for scoring — *explicit decision: scoring runs on the local Claude subscription via `claude -p`*
+- Headless `claude -p`-in-container / agent-host scoring — *killed: the 0–100 score is a structured SDK call, not an agent run. Only revisit if a real driver emerges for multi-step tool-use DURING an audit (driver #3); for a score it does not exist*
+- Routing deterministic checks (robots, llms.txt, schema, SSR/CSR) through LLM calls — *they are plain functions in `@geo/core`; sending them to Claude is waste and the exact failure mode to prevent*
 - A new end-user-facing UI for geo-api — *it's a service; consumer apps own their UIs*
 - Multi-tenant billing / Titanium licensing wiring — *internal service for now; revisit if it becomes user-facing*
 
@@ -56,9 +56,10 @@
 
 ## Constraints
 
-- **Tech stack**: FastAPI (Python 3) — chosen for native OpenAPI, async/BackgroundTasks for long-running audits, and Pydantic-typed contracts.
+- **Tech stack**: **All-TS** (decided). Service = **Bun + Hono** per global rule 21 (`@hono/zod-openapi` + `@scalar/hono-api-reference` for `/openapi.json` + `/docs`; bootstrap from `_templates/bun-hono-app/`). Scoring via the TS `@anthropic-ai/sdk`. The existing Python `scripts/*.py` scrapers are **ported to TS** inside `@geo/core` (not reused in-process).
+- **Shared core**: `@geo/core` = zero-dependency **TS** package of deterministic functions, imported inline by HOW (lives in/next to HOW's `packages/` monorepo) and by the Bun+Hono service; **ottolax (Python) reaches the same logic via the service's HTTP API.**
 - **Database**: Postgres on Coolify (`DATABASE_URL` in Coolify env, never in repo). Not Supabase, not SQLite for prod.
-- **Scoring**: headless `claude -p` on the local Claude subscription — NOT an API key.
+- **Scoring**: one structured Anthropic SDK call (JSON output schema + prompt caching) — API key in Coolify env. NOT `claude -p`, NOT an agent host.
 - **Deployment**: standalone container on Coolify (`coolify.titaniumlabs.us`).
 - **Security**: `/audit` accepts arbitrary URLs → SSRF + size-cap hardening is a prerequisite, not optional. API surface must be authenticated.
 - **Docs**: must ship `/openapi.json` + `/docs`, plus `docs/` + `README.md` + `CLAUDE.md` (global rule 21).
@@ -71,7 +72,12 @@
 | FastAPI over the existing Flask | Native OpenAPI/`/docs`, async for long audits, Pydantic-typed `/audit` contract for consumer codegen | — Pending |
 | Standalone Coolify service (not embedded library) | One GEO service, many consumers; isolates scraping risk from product apps; single place to maintain | — Pending |
 | Async job model (`POST /audit`→job_id, `GET /audit/{id}`) | Audits take tens of seconds to minutes; can't block the request | — Pending |
-| Scoring via `claude -p` on subscription | Reuse the markdown-driven scoring engine headlessly without per-call API cost | — Pending (de-risk spike required) |
+| Scoring = structured Anthropic SDK call (JSON schema + prompt caching) | Removes the riskiest/most-expensive phase (claude -p container spike); a score needs one judgment call, not an agent host; cheap + deterministic-shaped output | — Pending |
+| Deterministic 80% in shared `@geo/core` package | Stops "we built a service" from turning a robots.txt check into a per-audit Claude call; lets HOW run cheap checks inline without round-tripping; one source of truth for the logic | — Pending |
+| Two real consumers (HOW + ottolax) justify the network boundary now | ≥2 committed consumers = the service earns its keep today; folding into HOW would force a painful double-paid extraction when ottolax needs it | ✓ Good |
+| All-TS: Bun+Hono service + TS `@geo/core`, port Python scrapers to TS | HOW (TS) imports `@geo/core` inline; the service imports the SAME code; one source of truth, zero cross-language duplication; ottolax (Python) consumes via HTTP. Cost accepted: porting scrapers to TS | ✓ Good |
+
+> **Research note:** `.planning/research/STACK.md` was produced under the earlier Python/FastAPI assumption (SAQ, psycopg3, claude -p). Its **stack-layer specifics are superseded** by the All-TS decision and the structured-SDK scoring decision above. The FEATURES, ARCHITECTURE, and PITFALLS research remain valid (language-agnostic: SSRF, async job state machine, SKIP LOCKED queue, Coolify topology, dedup/caching, healthcheck depth).
 | Coolify Postgres replaces `~/.geo-prospects/*.json` | JSON files are racy under concurrent writes (CONCERNS.md); need durable, concurrent-safe storage | — Pending |
 | Keep Flask CRM unchanged this milestone | Out of scope; avoid scope creep | — Pending |
 
