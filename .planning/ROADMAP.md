@@ -32,7 +32,14 @@
   3. `getSchemaTemplates(pageData)` returns schema.org templates and validates existing structured data
   4. `computeCitabilityScore(pageData)` returns numeric sub-scores with no LLM calls
   5. `detectRendering(url)` classifies a URL as SSR or CSR deterministically
-**Plans**: TBD
+**Plans**: 7 plans
+  - [ ] 01-00-PLAN.md — Walking Skeleton: Bun workspace + @geo/core scaffold, tsup dual build, vitest, FetchResult/Fetcher seam, one real fn end-to-end (Wave 0)
+  - [ ] 01-01-PLAN.md — CORE-01 checkRobots: robots.txt + AI-crawler crawlability + sitemap-bug fix (Wave 1)
+  - [ ] 01-02-PLAN.md — CORE-02 generateLlmsTxt + validateLlmsTxt (Wave 1)
+  - [ ] 01-03-PLAN.md — CORE-03 getSchemaTemplates + zero-dep JSON-LD validateStructuredData (Wave 1)
+  - [ ] 01-04-PLAN.md — CORE-04 computeCitabilityScore + CITABILITY_WEIGHTS (TDD) (Wave 1)
+  - [ ] 01-05-PLAN.md — CORE-05 detectRendering multi-signal SSR/CSR (Wave 1)
+  - [ ] 01-06-PLAN.md — CORE-06 dual ESM+CJS consumability + zero-dep + full-suite phase gate (Wave 2)
 
 ### Phase 2: SSRF & Fetch Hardening
 **Goal**: The URL fetch layer is hardened against SSRF, DNS-rebinding, redirect abuse, and response-size attacks before any URL is accepted over HTTP.
