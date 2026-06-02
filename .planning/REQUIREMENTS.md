@@ -9,7 +9,7 @@
 
 Zero-dependency TypeScript package of deterministic functions. Imported inline by `hyperoptimizedwebsites` and by the service. No requirement in this category may call an LLM.
 
-- [ ] **CORE-01**: `@geo/core` exposes a crawl/robots.txt fetch + parse function (can the page be fetched; is it crawlable by AI bots)
+- [x] **CORE-01**: `@geo/core` exposes a crawl/robots.txt fetch + parse function (can the page be fetched; is it crawlable by AI bots)
 - [ ] **CORE-02**: `@geo/core` generates an `llms.txt` for a given site from crawl data
 - [ ] **CORE-03**: `@geo/core` provides schema.org / structured-data templates + a validator for a page
 - [ ] **CORE-04**: `@geo/core` computes a citability heuristic (deterministic sub-scores feeding the final GEO score)
@@ -100,7 +100,7 @@ Prerequisite — nothing that accepts a URL ships before this.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 1: @geo/core — Deterministic Package | Pending |
+| CORE-01 | Phase 1: @geo/core — Deterministic Package | Complete |
 | CORE-02 | Phase 1: @geo/core — Deterministic Package | Pending |
 | CORE-03 | Phase 1: @geo/core — Deterministic Package | Pending |
 | CORE-04 | Phase 1: @geo/core — Deterministic Package | Pending |
