@@ -19,9 +19,11 @@
 
 import { request, Agent } from "undici";
 import type { Dispatcher } from "undici";
+import { Readable } from "node:stream";
 import type { FetchResult } from "@geo/core";
 import { resolveAndValidate, DnsValidationError } from "./dns-resolve.js";
 import { FetchErrorCode, buildErrorResult } from "./errors.js";
+import { makeByteCounter, buildDecompressChain } from "./decompression.js";
 import type { Resolver } from "./dns-resolve.js";
 
 // ---------------------------------------------------------------------------
@@ -174,6 +176,7 @@ export function createSafeFetcher(options: SafeFetcherOptions = {}): (url: strin
   const allowedPorts = options.allowedPorts ?? DEFAULT_ALLOWED_PORTS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+  const maxBytes = options.maxBytes ?? 5_000_000;
   const resolver = options.resolver;
   const testDispatcher = options._testDispatcher;
 
@@ -312,7 +315,53 @@ export function createSafeFetcher(options: SafeFetcherOptions = {}): (url: strin
         }
       }
 
-      const body = await response.body.text();
+      // -----------------------------------------------------------------------
+      // Content-Length early reject (SEC-04)
+      // -----------------------------------------------------------------------
+      const contentLengthHeader = headers["content-length"];
+      if (contentLengthHeader !== undefined) {
+        const contentLength = parseInt(contentLengthHeader, 10);
+        if (!isNaN(contentLength) && contentLength > maxBytes) {
+          try { await response.body.dump(); } catch { /* ignore */ }
+          return buildErrorResult(rawUrl, FetchErrorCode.RESPONSE_TOO_LARGE, redirectChain);
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // Build decompression pipeline; throws synchronously for stacked>2 or unknown
+      // -----------------------------------------------------------------------
+      let decompressChain: NodeJS.ReadWriteStream[];
+      try {
+        decompressChain = buildDecompressChain(headers["content-encoding"] ?? null, maxBytes);
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        try { await response.body.dump(); } catch { /* ignore */ }
+        return buildErrorResult(
+          rawUrl,
+          code === FetchErrorCode.DECOMPRESSION_BOMB
+            ? FetchErrorCode.DECOMPRESSION_BOMB
+            : FetchErrorCode.FETCH_ERROR,
+          redirectChain,
+        );
+      }
+
+      // -----------------------------------------------------------------------
+      // Stream body through decompress chain + identity size counter (SEC-04)
+      // If no decompressors, still apply a raw-byte counter for RESPONSE_TOO_LARGE.
+      // -----------------------------------------------------------------------
+      let body: string;
+      try {
+        body = await readBodyBounded(response.body, decompressChain, maxBytes);
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        if (code === FetchErrorCode.RESPONSE_TOO_LARGE) {
+          return buildErrorResult(rawUrl, FetchErrorCode.RESPONSE_TOO_LARGE, redirectChain);
+        }
+        if (code === FetchErrorCode.DECOMPRESSION_BOMB) {
+          return buildErrorResult(rawUrl, FetchErrorCode.DECOMPRESSION_BOMB, redirectChain);
+        }
+        return buildErrorResult(rawUrl, FetchErrorCode.FETCH_ERROR, redirectChain);
+      }
 
       return {
         url: rawUrl,
@@ -324,6 +373,56 @@ export function createSafeFetcher(options: SafeFetcherOptions = {}): (url: strin
       };
     }
   };
+}
+
+// ---------------------------------------------------------------------------
+// readBodyBounded — stream body through decompression + byte cap
+// ---------------------------------------------------------------------------
+
+/**
+ * Reads the response body through an optional decompression chain and a
+ * raw-wire byte counter. Returns the buffered UTF-8 string.
+ *
+ * If `decompressChain` is empty, applies only a raw-byte counter
+ * (RESPONSE_TOO_LARGE) so identity bodies are capped too.
+ *
+ * Rejects with an error carrying `.code = RESPONSE_TOO_LARGE | DECOMPRESSION_BOMB`
+ * if either cap is exceeded.
+ */
+async function readBodyBounded(
+  body: { [Symbol.asyncIterator](): AsyncIterator<Buffer | Uint8Array> },
+  decompressChain: NodeJS.ReadWriteStream[],
+  maxBytes: number,
+): Promise<string> {
+  // If no decompressors, add a raw-byte identity counter (RESPONSE_TOO_LARGE)
+  const stages: NodeJS.ReadWriteStream[] = [
+    ...(decompressChain.length === 0
+      ? [makeByteCounter(maxBytes, FetchErrorCode.RESPONSE_TOO_LARGE)]
+      : decompressChain),
+  ];
+
+  // Convert undici body (async iterable) to a Node Readable
+  const source = Readable.from(body as AsyncIterable<Buffer>);
+
+  // Pipe source through all stages, collecting from the last stage
+  const last = stages[stages.length - 1]!;
+  const chunks: Buffer[] = [];
+
+  await new Promise<void>((resolve, reject) => {
+    last.on("data", (chunk: Buffer | Uint8Array) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    last.on("end", resolve);
+    last.on("error", reject);
+
+    let current: NodeJS.ReadableStream = source;
+    for (const stage of stages) {
+      current = current.pipe(stage as unknown as NodeJS.WritableStream & NodeJS.ReadableStream);
+    }
+    source.on("error", reject);
+  });
+
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 // ---------------------------------------------------------------------------
