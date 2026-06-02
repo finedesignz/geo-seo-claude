@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 Plan 03 complete (size cap + decompression-bomb + Fetcher-conformance gate, SEC-04/05)
-last_updated: "2026-06-02T20:17:44.672Z"
+stopped_at: Phase 3 Plan 00 complete (@geo/db scaffold, getSql guard, PGlite harness)
+last_updated: "2026-06-02T14:00:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 2
-  total_plans: 11
-  completed_plans: 11
-  percent: 29
+  total_plans: 14
+  completed_plans: 12
+  percent: 32
 ---
 
 # Project State: geo-api
@@ -26,11 +26,11 @@ progress:
 
 ## Current Position
 
-Phase: 2 (ssrf-fetch-hardening) — EXECUTING
-Plan: 1 of 4
-**Phase:** 2 — SSRF & Fetch Hardening — EXECUTING
-**Plan:** Plan 03 COMPLETE — size cap, decompression-bomb defense, Fetcher-conformance gate
-**Status:** Executing Phase 2, Plan 04 next (phase gate / final)
+Phase: 3 (postgres-schema-durable-job-queue) — EXECUTING
+Plan: 2 of 3
+**Phase:** 3 — Postgres Schema & Durable Job Queue — EXECUTING
+**Plan:** Plan 00 COMPLETE — @geo/db scaffold, getSql guard, PGlite harness
+**Status:** Executing Phase 3
 **Branch:** phase-01-geo-core-deterministic-package
 
 ```
@@ -46,7 +46,7 @@ Progress: [█████████░] 91%
 |---|------|--------|
 | 1 | @geo/core — Deterministic Package | COMPLETE (Plans 00-06, CORE-01..06) |
 | 2 | SSRF & Fetch Hardening | EXECUTING (Plan 00 done) |
-| 3 | Postgres Schema & Durable Job Queue | Not started |
+| 3 | Postgres Schema & Durable Job Queue | EXECUTING (Plan 00 done) |
 | 4 | Worker Pipeline | Not started |
 | 5 | Bun+Hono API Layer | Not started |
 | 6 | Containerize & Coolify Deploy | Not started |
@@ -73,6 +73,7 @@ Progress: [█████████░] 91%
 | 02-01 createSafeFetcher + resolve-then-pin | ~20 min | 2 | 6 |
 | 02-02 manual redirects + per-hop SSRF | ~15 min | 2 | 5 |
 | 02-03 size cap + decompression-bomb + phase gate | ~15 min | 2 | 7 |
+| 03-00 @geo/db scaffold + getSql guard + PGlite harness | ~15 min | 3 | 11 |
 
 ---
 
@@ -122,9 +123,9 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-06-02T20:11:47.135Z
-**Stopped at:** Phase 2 Plan 01 complete (createSafeFetcher, resolve-then-pin, SEC-01/02/05)
-**Next action:** Phase 2 Plan 02 — redirect chain + per-hop SSRF re-validation (Wave 2)
+**Last session:** 2026-06-02T14:00:00.000Z
+**Stopped at:** Phase 3 Plan 00 complete (@geo/db scaffold, getSql guard, PGlite harness, DATA-03)
+**Next action:** Phase 3 Plan 01 — idempotent migration runner + schema_migrations + 0001_create_audits.sql
 
 ---
 *State initialized: 2026-06-01*
