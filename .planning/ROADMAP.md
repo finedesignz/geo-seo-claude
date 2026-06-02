@@ -53,8 +53,8 @@
   4. A response exceeding the size cap or triggering decompression inflation fails with a clear structured error
   5. All blocked fetches produce a job-level `failed` status with a machine-readable error code
 **Plans**: 4 plans
-  - [ ] 02-00-PLAN.md — Wave 0: @geo/fetch scaffold + undici/ipaddr.js + IP deny-list (SEC-01) + error model (SEC-05) + loopback test-server/mock-resolver helpers (Wave 0)
-  - [ ] 02-01-PLAN.md — createSafeFetcher: scheme/port allowlist + resolve-then-pin DNS + rebinding-safe happy path (SEC-01/02/05) (Wave 1)
+  - [x] 02-00-PLAN.md — Wave 0: @geo/fetch scaffold + undici/ipaddr.js + IP deny-list (SEC-01) + error model (SEC-05) + loopback test-server/mock-resolver helpers (Wave 0)
+  - [x] 02-01-PLAN.md — createSafeFetcher: scheme/port allowlist + resolve-then-pin DNS + rebinding-safe happy path (SEC-01/02/05) (Wave 1)
   - [ ] 02-02-PLAN.md — manual redirect loop with per-hop SSRF re-validation + hop cap + redirectChain (SEC-03/02/05) (Wave 2)
   - [ ] 02-03-PLAN.md — streamed size cap + decompression-bomb defense + exports/Fetcher-conformance phase gate (SEC-04/05) (Wave 3)
 

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 Plan 00 complete (@geo/fetch scaffold — SEC-01 IP classifier + SEC-05 error model)
-last_updated: "2026-06-02T21:30:00.000Z"
+stopped_at: Phase 2 Plan 01 complete (createSafeFetcher — resolve-then-pin, scheme/port/userinfo blocks, SEC-01/02/05)
+last_updated: "2026-06-02T13:10:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 11
-  completed_plans: 8
-  percent: 18
+  completed_plans: 9
+  percent: 20
 ---
 
 # Project State: geo-api
@@ -29,8 +29,8 @@ progress:
 Phase: 2 (ssrf-fetch-hardening) — EXECUTING
 Plan: 1 of 4
 **Phase:** 2 — SSRF & Fetch Hardening — EXECUTING
-**Plan:** Plan 00 COMPLETE — @geo/fetch scaffold, IP classifier, error model
-**Status:** Executing Phase 2, Plan 01 next
+**Plan:** Plan 01 COMPLETE — createSafeFetcher, resolve-then-pin, scheme/port blocks
+**Status:** Executing Phase 2, Plan 02 next
 **Branch:** phase-01-geo-core-deterministic-package
 
 ```
@@ -70,6 +70,7 @@ Progress: [██░░░░░░░░] 18%
 | 01-05 detectRendering SSR/CSR/hybrid | ~10 min | 1 | 4 |
 | 01-06 phase gate + dual ESM/CJS | ~15 min | 3 | 10 |
 | 02-00 @geo/fetch scaffold + IP classifier | ~10 min | 2 | 11 |
+| 02-01 createSafeFetcher + resolve-then-pin | ~20 min | 2 | 6 |
 
 ---
 
@@ -89,6 +90,9 @@ Progress: [██░░░░░░░░] 18%
 - isBlockedIP strategy: deny range() !== "unicast" (fail-closed D-04); ipaddr.js 2.4.0 normalizes obfuscated forms
 - IPv4-mapped IPv6 unwrapped via isIPv4MappedAddress()+toIPv4Address() before range check (T-02-01)
 - FetchErrorCode as const object not enum (avoids TS const-enum cross-module pitfall)
+- resolve-then-pin: single resolveAndValidate call → pinned IP in URL + undici Agent(connect.servername=hostname) — no dns-interceptor
+- Direct IP literals (decimal/octal/hex/IPv4-mapped IPv6) detected and blocked without DNS round-trip
+- _testDispatcher seam in SafeFetcherOptions: post-validation only; resolveAndValidate always runs in production
 - `callback_url` webhook uses same SSRF guard as audit URL
 - Flask CRM (`scripts/webapp/app.py`) untouched this milestone
 
@@ -113,9 +117,9 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-06-02T21:30:00.000Z
-**Stopped at:** Phase 2 Plan 00 complete (@geo/fetch scaffold — IP classifier + error model)
-**Next action:** Phase 2 Plan 01 — createSafeFetcher network implementation (Wave 1)
+**Last session:** 2026-06-02T13:10:00.000Z
+**Stopped at:** Phase 2 Plan 01 complete (createSafeFetcher, resolve-then-pin, SEC-01/02/05)
+**Next action:** Phase 2 Plan 02 — redirect chain + per-hop SSRF re-validation (Wave 2)
 
 ---
 *State initialized: 2026-06-01*
