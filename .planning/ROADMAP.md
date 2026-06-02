@@ -68,7 +68,10 @@
   2. A job inserted as `queued` is claimable via `SELECT FOR UPDATE SKIP LOCKED` and transitions to `running` → `done | failed`
   3. Killing and restarting the service does not leave jobs permanently stuck in `running` (lease/timeout detection works)
   4. `DATABASE_URL` is never present in any committed file; service reads it from env only
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 03-00-PLAN.md — Wave 0: @geo/db scaffold + postgres.js client DATABASE_URL fail-fast guard + PGlite test harness + .env.example (DATA-03)
+  - [ ] 03-01-PLAN.md — Wave 1: idempotent migration runner + schema_migrations + 0001_create_audits.sql (all D-06 columns) + schema/idempotency tests (DATA-04, DATA-01)
+  - [ ] 03-02-PLAN.md — Wave 2: typed DAL (8 D-10 functions) + SKIP LOCKED claim + lease reclaim + lifecycle/queue tests + DATABASE_URL-gated concurrency test (DATA-01, DATA-02, WORK-01)
 
 ### Phase 4: Worker Pipeline
 **Goal**: A background worker reliably runs the full audit pipeline — @geo/core deterministic checks followed by a single structured Anthropic SDK scoring call — and persists the 0–100 result.
@@ -130,7 +133,7 @@
 |-------|----------------|--------|-----------|
 | 1. @geo/core — Deterministic Package | 5/7 | In Progress|  |
 | 2. SSRF & Fetch Hardening | 3/4 | In Progress|  |
-| 3. Postgres Schema & Durable Job Queue | 0/0 | Not started | - |
+| 3. Postgres Schema & Durable Job Queue | 0/3 | Planned | - |
 | 4. Worker Pipeline | 0/0 | Not started | - |
 | 5. Bun+Hono API Layer | 0/0 | Not started | - |
 | 6. Containerize & Coolify Deploy | 0/0 | Not started | - |
@@ -138,4 +141,4 @@
 
 ---
 *Roadmap created: 2026-06-01*
-*Last updated: 2026-06-01 after initial creation*
+*Last updated: 2026-06-02 — Phase 3 planned (3 plans)*
