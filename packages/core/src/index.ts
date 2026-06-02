@@ -9,6 +9,7 @@ export type {
   FetchResult,
   Fetcher,
   AiCrawler,
+  CrawlerStatus,
   RobotsResult,
   LlmsTxtResult,
   SchemaTemplateResult,
@@ -20,3 +21,5 @@ export type {
 export { AI_CRAWLERS } from "./types.js";
 
 export { normalizeUrl } from "./url.js";
+
+export { checkRobots } from "./robots.js";

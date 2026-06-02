@@ -42,11 +42,21 @@ export type AiCrawler = (typeof AI_CRAWLERS)[number];
 // Wave 1 fills in the full fields; barrel always exports these so imports never break.
 // ---------------------------------------------------------------------------
 
+export type CrawlerStatus =
+  | "ALLOWED"
+  | "BLOCKED"
+  | "PARTIALLY_BLOCKED"
+  | "BLOCKED_BY_WILDCARD"
+  | "ALLOWED_BY_DEFAULT"
+  | "NOT_MENTIONED"
+  | "NO_ROBOTS_TXT";
+
 export interface RobotsResult {
   url: string;
-  sitemapUrls: string[];
-  /** Crawlability per AI agent: key = AiCrawler name, value = allowed */
-  crawlability: Record<string, boolean>;
+  exists: boolean;
+  content: string;
+  aiCrawlerStatus: Record<AiCrawler, CrawlerStatus>;
+  sitemaps: string[];
   errors: string[];
 }
 
