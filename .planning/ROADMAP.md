@@ -33,7 +33,7 @@
   4. `computeCitabilityScore(pageData)` returns numeric sub-scores with no LLM calls
   5. `detectRendering(url)` classifies a URL as SSR or CSR deterministically
 **Plans**: 7 plans
-  - [ ] 01-00-PLAN.md — Walking Skeleton: Bun workspace + @geo/core scaffold, tsup dual build, vitest, FetchResult/Fetcher seam, one real fn end-to-end (Wave 0)
+  - [x] 01-00-PLAN.md — Walking Skeleton: Bun workspace + @geo/core scaffold, tsup dual build, vitest, FetchResult/Fetcher seam, one real fn end-to-end (Wave 0)
   - [ ] 01-01-PLAN.md — CORE-01 checkRobots: robots.txt + AI-crawler crawlability + sitemap-bug fix (Wave 1)
   - [ ] 01-02-PLAN.md — CORE-02 generateLlmsTxt + validateLlmsTxt (Wave 1)
   - [ ] 01-03-PLAN.md — CORE-03 getSchemaTemplates + zero-dep JSON-LD validateStructuredData (Wave 1)

@@ -1,3 +1,17 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
+last_updated: "2026-06-02T12:10:00.000Z"
+progress:
+  total_phases: 7
+  completed_phases: 0
+  total_plans: 7
+  completed_plans: 1
+  percent: 14
+---
+
 # Project State: geo-api
 
 ## Project Reference
@@ -11,13 +25,15 @@
 
 ## Current Position
 
+Phase: 1 (geo-core-deterministic-package) — EXECUTING
+Plan: 2 of 7
 **Phase:** 1 — @geo/core: Deterministic Package
-**Plan:** None started
-**Status:** Not started
-**Branch:** main (no phase branch cut yet)
+**Plan:** Plan 00 COMPLETE — Plan 01 next
+**Status:** Executing Phase 1
+**Branch:** phase-01-geo-core-deterministic-package
 
 ```
-Progress: [ ] [ ] [ ] [ ] [ ] [ ] [ ]
+Progress: [x] [ ] [ ] [ ] [ ] [ ] [ ]
            1   2   3   4   5   6   7
 ```
 
@@ -27,7 +43,7 @@ Progress: [ ] [ ] [ ] [ ] [ ] [ ] [ ]
 
 | # | Name | Status |
 |---|------|--------|
-| 1 | @geo/core — Deterministic Package | Not started |
+| 1 | @geo/core — Deterministic Package | Plan 00 complete (walking skeleton) |
 | 2 | SSRF & Fetch Hardening | Not started |
 | 3 | Postgres Schema & Durable Job Queue | Not started |
 | 4 | Worker Pipeline | Not started |
@@ -40,8 +56,12 @@ Progress: [ ] [ ] [ ] [ ] [ ] [ ] [ ]
 ## Performance Metrics
 
 - Phases completed: 0/7
-- Requirements shipped: 0/35
-- Plans executed: 0
+- Requirements shipped: 1/35 (CORE-06: @geo/core workspace-consumable)
+- Plans executed: 1
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| 01-00 Walking Skeleton | ~15 min | 2 | 15 |
 
 ---
 
@@ -49,6 +69,9 @@ Progress: [ ] [ ] [ ] [ ] [ ] [ ] [ ]
 
 ### Key Decisions
 
+- Plan 00: FetchResult.headers lowercase-keyed; normalization is caller responsibility (D-05)
+- Plan 00: tsconfig ignoreDeprecations:6.0 required for TS 6.0.3 + tsup DTS + moduleResolution:bundler
+- Plan 00: AI_CRAWLERS as readonly const tuple from scripts/fetch_page.py keys
 - All-TS stack: Bun+Hono service + zero-dep `@geo/core` TS package
 - Python scrapers ported to TS inside `@geo/core` (not reused in-process)
 - Scoring = single `@anthropic-ai/sdk` structured call with JSON output schema + prompt caching (NOT `claude -p`)
@@ -79,8 +102,9 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-06-01 — roadmap created, files initialized
-**Next action:** `/gsd:plan-phase 1` to plan @geo/core package
+**Last session:** 2026-06-02 — Plan 00 (Walking Skeleton) executed; @geo/core workspace + dual build + type seam + tests green
+**Stopped at:** Phase 1 Plan 01 (robots.txt parser)
+**Next action:** Execute Plan 01 — `checkRobots` implementation
 
 ---
 *State initialized: 2026-06-01*
