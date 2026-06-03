@@ -119,6 +119,14 @@ export interface AuditDal {
   claimNextJob(leaseSecs?: number): Promise<AuditJob | null>;
   completeJob(id: string, leaseToken: string, score: number, findings: FindingsShape): Promise<boolean>;
   failJob(id: string, leaseToken: string, errorCode: string): Promise<boolean>;
+  /**
+   * Requeue a running job back to queued status (D-15).
+   * Lease-fenced: only updates rows WHERE id=$id AND lease_token=$tok AND status='running'.
+   * Records errorCode so the failure reason is preserved across attempts.
+   * Does NOT touch attempts (already incremented at claim).
+   * Returns true if the row was updated, false if the lease was stale/lost.
+   */
+  requeueJob(id: string, leaseToken: string, errorCode: string): Promise<boolean>;
   renewLease(id: string, leaseToken: string, secs: number): Promise<boolean>;
   getJob(id: string): Promise<AuditJob | null>;
   listJobs(pagination: PaginationInput): Promise<AuditJob[]>;
@@ -242,6 +250,27 @@ export function createAuditDal(executor: SqlExecutor): AuditDal {
             SET status           = 'failed',
                 error_code       = $3,
                 finished_at      = now(),
+                lease_token      = NULL,
+                locked_at        = NULL,
+                lease_expires_at = NULL,
+                updated_at       = now()
+          WHERE id          = $1
+            AND lease_token = $2::uuid
+            AND status      = 'running'
+          RETURNING id`,
+        [id, leaseToken, errorCode],
+      );
+      return rows.length > 0;
+    },
+
+    // -------------------------------------------------------------------------
+    // requeueJob — running → queued, fenced by lease_token (D-15)
+    // -------------------------------------------------------------------------
+    async requeueJob(id: string, leaseToken: string, errorCode: string): Promise<boolean> {
+      const rows = await executor.query<{ id: string }>(
+        `UPDATE audits
+            SET status           = 'queued',
+                error_code       = $3,
                 lease_token      = NULL,
                 locked_at        = NULL,
                 lease_expires_at = NULL,
