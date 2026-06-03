@@ -28,10 +28,10 @@ Prerequisite — nothing that accepts a URL ships before this.
 
 ### Scoring
 
-- [ ] **SCORE-01**: The 0–100 GEO Score is produced by a single structured Anthropic SDK call using a JSON output schema (no `claude -p`, no agent host)
-- [ ] **SCORE-02**: The scoring prompt is fed the deterministic `@geo/core` findings as input; the LLM renders only the irreducible judgment
-- [ ] **SCORE-03**: The scoring call uses prompt caching for the static portion of the prompt
-- [ ] **SCORE-04**: A scoring-call failure (timeout, rate limit, malformed output) fails the job cleanly with a ret[r]yable status, never a partial score
+- [x] **SCORE-01**: The 0–100 GEO Score is produced by a single structured Anthropic SDK call using a JSON output schema (no `claude -p`, no agent host)
+- [x] **SCORE-02**: The scoring prompt is fed the deterministic `@geo/core` findings as input; the LLM renders only the irreducible judgment
+- [x] **SCORE-03**: The scoring call uses prompt caching for the static portion of the prompt
+- [x] **SCORE-04**: A scoring-call failure (timeout, rate limit, malformed output) fails the job cleanly with a ret[r]yable status, never a partial score
 
 ### Persistence
 
@@ -116,10 +116,10 @@ Prerequisite — nothing that accepts a URL ships before this.
 | DATA-03 | Phase 3: Postgres Schema & Durable Job Queue | Pending |
 | DATA-04 | Phase 3: Postgres Schema & Durable Job Queue | Pending |
 | WORK-01 | Phase 3: Postgres Schema & Durable Job Queue | Pending |
-| SCORE-01 | Phase 4: Worker Pipeline | Pending |
-| SCORE-02 | Phase 4: Worker Pipeline | Pending |
-| SCORE-03 | Phase 4: Worker Pipeline | Pending |
-| SCORE-04 | Phase 4: Worker Pipeline | Pending |
+| SCORE-01 | Phase 4: Worker Pipeline | Complete |
+| SCORE-02 | Phase 4: Worker Pipeline | Complete |
+| SCORE-03 | Phase 4: Worker Pipeline | Complete |
+| SCORE-04 | Phase 4: Worker Pipeline | Complete |
 | WORK-02 | Phase 4: Worker Pipeline | Pending |
 | WORK-03 | Phase 4: Worker Pipeline | Pending |
 | WORK-04 | Phase 4: Worker Pipeline | Pending |
