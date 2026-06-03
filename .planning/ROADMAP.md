@@ -12,7 +12,7 @@
 - [x] **Phase 1: @geo/core — Deterministic Package** - Zero-dep TS package with all deterministic audit functions (crawl, llms.txt, schema, citability, SSR/CSR detection), usable by HOW and the service
 - [x] **Phase 2: SSRF & Fetch Hardening** - Harden URL fetcher to block SSRF vectors, DNS-rebinding, redirect chains, size caps — prerequisite for all URL-accepting features
 - [x] **Phase 3: Postgres Schema & Durable Job Queue** - Coolify Postgres schema with migration management, job state machine, and SKIP LOCKED worker queue
-- [ ] **Phase 4: Worker Pipeline** - Background worker claiming jobs, running @geo/core deterministic checks + structured Anthropic SDK scoring call, persisting results
+- [x] **Phase 4: Worker Pipeline** - Background worker claiming jobs, running @geo/core deterministic checks + structured Anthropic SDK scoring call, persisting results (completed 2026-06-03)
 - [ ] **Phase 5: Bun+Hono API Layer** - POST/GET /audit endpoints, auth, dedup, webhook, history, /healthz, /openapi.json + /docs
 - [ ] **Phase 6: Containerize & Coolify Deploy** - Container image for API + worker, Coolify service setup, env-sourced secrets, deploy verification
 - [ ] **Phase 7: Cron + Consumer Wiring** - Scheduled re-audit cron container, HOW inline @geo/core integration, ottolax HTTP consumer integration
@@ -87,7 +87,7 @@
 **Plans**: 3 plans
   - [x] 04-00-PLAN.md — Wave 0: @geo/worker scaffold (tsup/vitest mirror db) + assertEnv fail-fast + AnthropicMessagesClient/WorkerOptions injection seams (infra)
   - [x] 04-01-PLAN.md — Wave 1: scorer slice — single forced-tool-use messages.create + prompt cache + zod + AbortController + typed ScoringError (SCORE-01..04)
-  - [ ] 04-02-PLAN.md — Wave 2: pipeline + worker-loop — runAudit (fetch→core→score→persist, completeJob success-only) + bounded concurrency + heartbeat-abort + reclaim sweep + graceful drain + main.ts (WORK-02/03/04)
+  - [x] 04-02-PLAN.md — Wave 2: pipeline + worker-loop — runAudit (fetch→core→score→persist, completeJob success-only) + bounded concurrency + heartbeat-abort + reclaim sweep + graceful drain + main.ts (WORK-02/03/04)
 
 ### Phase 5: Bun+Hono API Layer
 **Goal**: The Bun+Hono service exposes a complete, authenticated REST API with async submit/poll, history, dedup, webhook, health, and full OpenAPI/Scalar docs.
@@ -137,7 +137,7 @@
 | 1. @geo/core — Deterministic Package | 7/7 | COMPLETE | 2026-06-02 |
 | 2. SSRF & Fetch Hardening | 4/4 | COMPLETE | 2026-06-02 |
 | 3. Postgres Schema & Durable Job Queue | 3/3 | COMPLETE | 2026-06-02 |
-| 4. Worker Pipeline | 2/3 | In Progress|  |
+| 4. Worker Pipeline | 3/3 | Complete   | 2026-06-03 |
 | 5. Bun+Hono API Layer | 0/0 | Not started | - |
 | 6. Containerize & Coolify Deploy | 0/0 | Not started | - |
 | 7. Cron + Consumer Wiring | 0/0 | Not started | - |

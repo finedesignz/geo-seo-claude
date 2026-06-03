@@ -54,9 +54,9 @@ Prerequisite — nothing that accepts a URL ships before this.
 ### Worker / Job Runner
 
 - [ ] **WORK-01**: A worker claims queued jobs from Postgres using `SELECT … FOR UPDATE SKIP LOCKED` (no Redis/Celery broker)
-- [ ] **WORK-02**: The worker runs the audit pipeline: `@geo/core` deterministic checks → structured scoring call → persist result
-- [ ] **WORK-03**: Concurrency is capped (bounded simultaneous audits); excess jobs wait
-- [ ] **WORK-04**: A crashed/stuck job is detectable and recoverable (lease/timeout), not stuck `running` forever
+- [x] **WORK-02**: The worker runs the audit pipeline: `@geo/core` deterministic checks → structured scoring call → persist result
+- [x] **WORK-03**: Concurrency is capped (bounded simultaneous audits); excess jobs wait
+- [x] **WORK-04**: A crashed/stuck job is detectable and recoverable (lease/timeout), not stuck `running` forever
 
 ### Deploy / Operations
 
@@ -120,9 +120,9 @@ Prerequisite — nothing that accepts a URL ships before this.
 | SCORE-02 | Phase 4: Worker Pipeline | Complete |
 | SCORE-03 | Phase 4: Worker Pipeline | Complete |
 | SCORE-04 | Phase 4: Worker Pipeline | Complete |
-| WORK-02 | Phase 4: Worker Pipeline | Pending |
-| WORK-03 | Phase 4: Worker Pipeline | Pending |
-| WORK-04 | Phase 4: Worker Pipeline | Pending |
+| WORK-02 | Phase 4: Worker Pipeline | Complete |
+| WORK-03 | Phase 4: Worker Pipeline | Complete |
+| WORK-04 | Phase 4: Worker Pipeline | Complete |
 | API-01 | Phase 5: Bun+Hono API Layer | Pending |
 | API-02 | Phase 5: Bun+Hono API Layer | Pending |
 | API-03 | Phase 5: Bun+Hono API Layer | Pending |
