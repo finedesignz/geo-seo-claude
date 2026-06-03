@@ -15,4 +15,7 @@ export {
   classifyScoringError,
 } from "./scorer.js";
 export type { GeoScoreOutput, ScorerOptions, ScoreResult } from "./scorer.js";
-// wave 2: export { runWorker } from "./worker.js";
+// wave 2
+export { runWorker } from "./worker.js";
+export { runAudit } from "./pipeline.js";
+export type { PipelineDeps } from "./pipeline.js";

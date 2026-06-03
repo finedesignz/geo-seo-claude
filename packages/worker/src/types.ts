@@ -78,7 +78,9 @@ export interface WorkerOptions {
   /** Resolves after ms milliseconds (defaults to real setTimeout). */
   sleep?: (ms: number) => Promise<void>;
   /** Schedules a recurring callback (defaults to real setInterval). */
-  scheduleInterval?: (fn: () => void, ms: number) => ReturnType<typeof setInterval>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scheduleInterval?: (fn: () => void, ms: number) => any;
   /** Cancels a scheduled interval (defaults to real clearInterval). */
-  cancelInterval?: (handle: ReturnType<typeof setInterval>) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  cancelInterval?: (handle: any) => void;
 }
