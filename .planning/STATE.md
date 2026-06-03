@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 Plan 01 complete (migration runner + 0001_create_audits schema, DATA-04/DATA-01)
-last_updated: "2026-06-02T14:15:00.000Z"
+stopped_at: Phase 3 Plan 02 complete (typed DAL + SKIP LOCKED claim + lifecycle/queue tests, DATA-01/02/WORK-01)
+last_updated: "2026-06-02T17:20:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 2
@@ -29,8 +29,8 @@ progress:
 Phase: 3 (postgres-schema-durable-job-queue) — EXECUTING
 Plan: 2 of 3
 **Phase:** 3 — Postgres Schema & Durable Job Queue — EXECUTING
-**Plan:** Plan 01 COMPLETE — migration runner + 0001_create_audits schema (DATA-04, DATA-01)
-**Status:** Executing Phase 3
+**Plan:** Plan 02 COMPLETE — typed DAL + SKIP LOCKED claim + lifecycle/queue/concurrency tests (DATA-01, DATA-02, WORK-01)
+**Status:** Phase 3 COMPLETE — all 3 plans done
 **Branch:** phase-01-geo-core-deterministic-package
 
 ```
@@ -75,6 +75,7 @@ Progress: [█████████░] 91%
 | 02-03 size cap + decompression-bomb + phase gate | ~15 min | 2 | 7 |
 | 03-00 @geo/db scaffold + getSql guard + PGlite harness | ~15 min | 3 | 11 |
 | 03-01 migration runner + 0001_create_audits schema | ~15 min | 2 | 5 |
+| 03-02 typed DAL + SKIP LOCKED claim + lease fencing + tests | ~20 min | 3 | 7 |
 
 ---
 
@@ -90,6 +91,9 @@ Progress: [█████████░] 91%
 - Scoring = single `@anthropic-ai/sdk` structured call with JSON output schema + prompt caching (NOT `claude -p`)
 - `@geo/core` lives in/alongside HOW's packages; ottolax consumes via HTTP only
 - Job queue = Postgres `SELECT FOR UPDATE SKIP LOCKED` (no Redis/Celery)
+- SqlExecutor interface as portable injection seam — postgres.js + PGlite both satisfy via adapters
+- completeJob/failJob return bool (not throw) on stale lease_token — Phase 4 worker logs and continues
+- reclaimExpired runs inside claimNextJob's transaction so expired leases are claimable in same pass
 - SSRF hardening is a hard prerequisite before any URL-accepting feature ships
 - isBlockedIP strategy: deny range() !== "unicast" (fail-closed D-04); ipaddr.js 2.4.0 normalizes obfuscated forms
 - IPv4-mapped IPv6 unwrapped via isIPv4MappedAddress()+toIPv4Address() before range check (T-02-01)
@@ -125,8 +129,8 @@ None.
 ## Session Continuity
 
 **Last session:** 2026-06-02T14:00:00.000Z
-**Stopped at:** Phase 3 Plan 01 complete (migration runner + audits schema, DATA-04/DATA-01, 24 tests green)
-**Next action:** Phase 3 Plan 02 — DAL (claim/complete/fail query functions)
+**Stopped at:** Phase 3 Plan 02 complete (DAL + SKIP LOCKED claim, 48 tests green + 1 skipped)
+**Next action:** Phase 4 — Worker Pipeline (claim/complete/fail/reclaim wiring + scoring)
 
 ---
 *State initialized: 2026-06-01*
