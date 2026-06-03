@@ -84,7 +84,10 @@
   3. A completed job has a numeric `score` (0–100) and structured `findings` persisted in Postgres
   4. A scoring call that times out or returns malformed output marks the job `failed` with a retryable status code — no partial score is written
   5. Concurrency is capped: no more than N simultaneous audits run (N is configurable); excess jobs wait in queue
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 04-00-PLAN.md — Wave 0: @geo/worker scaffold (tsup/vitest mirror db) + assertEnv fail-fast + AnthropicMessagesClient/WorkerOptions injection seams (infra)
+  - [ ] 04-01-PLAN.md — Wave 1: scorer slice — single forced-tool-use messages.create + prompt cache + zod + AbortController + typed ScoringError (SCORE-01..04)
+  - [ ] 04-02-PLAN.md — Wave 2: pipeline + worker-loop — runAudit (fetch→core→score→persist, completeJob success-only) + bounded concurrency + heartbeat-abort + reclaim sweep + graceful drain + main.ts (WORK-02/03/04)
 
 ### Phase 5: Bun+Hono API Layer
 **Goal**: The Bun+Hono service exposes a complete, authenticated REST API with async submit/poll, history, dedup, webhook, health, and full OpenAPI/Scalar docs.
@@ -134,11 +137,11 @@
 | 1. @geo/core — Deterministic Package | 7/7 | COMPLETE | 2026-06-02 |
 | 2. SSRF & Fetch Hardening | 4/4 | COMPLETE | 2026-06-02 |
 | 3. Postgres Schema & Durable Job Queue | 3/3 | COMPLETE | 2026-06-02 |
-| 4. Worker Pipeline | 0/0 | Not started | - |
+| 4. Worker Pipeline | 0/3 | Planned | - |
 | 5. Bun+Hono API Layer | 0/0 | Not started | - |
 | 6. Containerize & Coolify Deploy | 0/0 | Not started | - |
 | 7. Cron + Consumer Wiring | 0/0 | Not started | - |
 
 ---
 *Roadmap created: 2026-06-01*
-*Last updated: 2026-06-02 — Phases 1–3 complete + verified; Phase 4 next*
+*Last updated: 2026-06-02 — Phases 1–3 complete + verified; Phase 4 planned (3 plans)*
