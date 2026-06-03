@@ -10,8 +10,8 @@
 ## Phases
 
 - [x] **Phase 1: @geo/core — Deterministic Package** - Zero-dep TS package with all deterministic audit functions (crawl, llms.txt, schema, citability, SSR/CSR detection), usable by HOW and the service
-- [ ] **Phase 2: SSRF & Fetch Hardening** - Harden URL fetcher to block SSRF vectors, DNS-rebinding, redirect chains, size caps — prerequisite for all URL-accepting features
-- [ ] **Phase 3: Postgres Schema & Durable Job Queue** - Coolify Postgres schema with migration management, job state machine, and SKIP LOCKED worker queue
+- [x] **Phase 2: SSRF & Fetch Hardening** - Harden URL fetcher to block SSRF vectors, DNS-rebinding, redirect chains, size caps — prerequisite for all URL-accepting features
+- [x] **Phase 3: Postgres Schema & Durable Job Queue** - Coolify Postgres schema with migration management, job state machine, and SKIP LOCKED worker queue
 - [ ] **Phase 4: Worker Pipeline** - Background worker claiming jobs, running @geo/core deterministic checks + structured Anthropic SDK scoring call, persisting results
 - [ ] **Phase 5: Bun+Hono API Layer** - POST/GET /audit endpoints, auth, dedup, webhook, history, /healthz, /openapi.json + /docs
 - [ ] **Phase 6: Containerize & Coolify Deploy** - Container image for API + worker, Coolify service setup, env-sourced secrets, deploy verification
@@ -131,8 +131,8 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. @geo/core — Deterministic Package | 5/7 | In Progress|  |
-| 2. SSRF & Fetch Hardening | 3/4 | In Progress|  |
+| 1. @geo/core — Deterministic Package | 7/7 | COMPLETE | 2026-06-02 |
+| 2. SSRF & Fetch Hardening | 4/4 | COMPLETE | 2026-06-02 |
 | 3. Postgres Schema & Durable Job Queue | 3/3 | COMPLETE | 2026-06-02 |
 | 4. Worker Pipeline | 0/0 | Not started | - |
 | 5. Bun+Hono API Layer | 0/0 | Not started | - |
@@ -141,4 +141,4 @@
 
 ---
 *Roadmap created: 2026-06-01*
-*Last updated: 2026-06-02 — Phase 3 planned (3 plans)*
+*Last updated: 2026-06-02 — Phases 1–3 complete + verified; Phase 4 next*
