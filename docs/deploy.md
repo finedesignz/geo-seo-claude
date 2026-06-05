@@ -9,7 +9,7 @@ Phase 7) executes against it. **Leave UUIDs/secrets as placeholders; the operato
 
 ---
 
-## Overview — one image, three run targets
+## Overview — one image, four run targets
 
 Plan 01 ships a single multi-stage `Dockerfile` (`oven/bun:1.3.1-slim`) that builds the
 whole Bun workspace. The **role is chosen by the start-command override** — there is no
@@ -20,8 +20,9 @@ entrypoint branch script (D-01 / D-03):
 | API        | _default CMD_ `bun packages/api/dist/main.js` | HTTP (8080) | `GET /healthz`                           |
 | Worker     | `bun packages/worker/dist/main.js`    | none       | exec `scripts/worker-healthcheck.sh` (heartbeat) |
 | Migrate    | `bun packages/db/scripts/migrate.ts`  | none       | one-shot (Pre-deployment command, below) |
+| Cron       | `bun packages/cron/dist/main.js`      | none       | one-shot (Scheduled Task, below)         |
 
-All three run **the same image / repo / branch** — only the command and resource settings differ.
+All four run **the same image / repo / branch** — only the command and resource settings differ.
 
 ---
 
@@ -145,6 +146,63 @@ queue with lease + reclaim). On SIGTERM the worker drains within `SHUTDOWN_GRACE
 job not finished in time keeps its row and is reclaimed by the next worker after its lease
 expires. **Requirement:** worker stop grace ≥ `SHUTDOWN_GRACE_MS` (step 4) — otherwise a
 SIGKILL mid-audit leaves the job leased until reclaim, adding latency (never data loss).
+
+---
+
+## Cron / scheduled re-audit (DEPLOY-02)
+
+The same image runs a **one-shot** cron caller that POSTs `/audit` to the deployed API for
+each configured URL, using a dedicated `cron` consumer bearer. It does NOT self-schedule —
+the clock is a **Coolify Scheduled Task**. The cron only ENQUEUES jobs; the worker does the
+slow scoring async (Pitfall 4), so a fire can return quickly and overlap between fires is
+unlikely. It never fetches the target sites itself (no SSRF surface added — T-07-02).
+
+### 1. Register the Scheduled Task  **[HUMAN GATE]**
+
+On the **API (geo-api) resource** → **Scheduled Tasks** → add a task:
+
+- **Command:** `bun packages/cron/dist/main.js`
+- **Frequency:** `0 4 * * *` (default — 04:00 **UTC** daily). This is the `CRON_SCHEDULE`
+  value; the process itself ignores it, so the Coolify field is the source of truth.
+
+### 2. Cron env + the `:cron` consumer key  **[HUMAN GATE]**
+
+Set on the geo-api resource (the Scheduled Task inherits the resource env), all **secrets**:
+
+| Var                | Notes                                                                       |
+|--------------------|-----------------------------------------------------------------------------|
+| `GEO_API_KEYS`     | **Append** a `<cron-token>:cron` entry (dedicated consumer_id, secret)       |
+| `CRON_API_TOKEN`   | The token part of that `:cron` entry — bearer the cron sends (secret)        |
+| `CRON_TARGET_URLS` | Comma/newline list of http(s) site URLs to re-audit                         |
+| `GEO_API_BASE_URL` | Internal origin of the API resource (e.g. `http://geo-api:8080`)            |
+
+Defaults/names come from `.env.example` (CRON block). Placeholders only — operator fills real values.
+
+### 3. ⚠️ Cadence constraint — MUST fire LESS than once per hour
+
+The API dedups submissions **per consumer** within a **hardcoded 1-hour `DEDUP_TTL`
+window**, and there is **no force flag** (D-3). A `cron` consumer that fires **more often
+than hourly will silently dedup** its own re-audits — the second fire returns the first
+fire's job and no new audit runs. Keep `CRON_SCHEDULE` **strictly less frequent than
+hourly** (default `0 4 * * *` = daily is safe). This is Pitfall 1 — do not "fix" a
+missing re-audit by tightening the schedule.
+
+### 4. Timezone note (Pitfall 2)
+
+Coolify cron expressions evaluate in **UTC**. `0 4 * * *` is 04:00 UTC, not local time.
+Pick the hour in UTC deliberately (e.g. off-peak for the target sites' region).
+
+### 5. (DEFERRED-LIVE) verify live firing  **[HUMAN GATE]**
+
+Mirrors Phase 6: **live scheduled firing + jobs-in-history are verified only AFTER the
+operator deploy.** Once the task is registered and a deploy is live:
+
+- Trigger the Scheduled Task manually from the Coolify UI (or wait for the first fire).
+- Confirm new `cron`-consumer jobs appear via `GET /audit/{job_id}` (use the smoke flow in
+  `scripts/deploy-verify.sh` as the auth/endpoint reference; `/openapi.json` is the contract
+  source of truth).
+- A second manual fire **within the same hour** should dedup (return the same job) — this is
+  the cadence constraint working as designed, not a bug.
 
 ---
 
