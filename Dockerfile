@@ -6,6 +6,7 @@
 #   API     (default CMD) : bun packages/api/dist/main.js      (PORT default 8080)
 #   Worker  (override)    : bun packages/worker/dist/main.js   (no port; SIGTERM drain)
 #   Migrate (pre-deploy)  : bun packages/db/scripts/migrate.ts (TS source; advisory-locked, idempotent)
+#   Cron    (scheduled task) : bun packages/cron/dist/main.js  (one-shot; Coolify cron expr)
 #
 # Base image is PINNED to an exact oven/bun patch tag (D-02) — never :latest.
 # Secrets are NEVER baked in — injected via Coolify env (D-07); .dockerignore drops .env*.
@@ -23,11 +24,12 @@ COPY packages/fetch/package.json  ./packages/fetch/package.json
 COPY packages/db/package.json     ./packages/db/package.json
 COPY packages/api/package.json    ./packages/api/package.json
 COPY packages/worker/package.json ./packages/worker/package.json
+COPY packages/cron/package.json   ./packages/cron/package.json
 
 RUN bun install --frozen-lockfile
 
 # ---------------------------------------------------------------------------
-# build — compile all 5 tsup packages (each emits dist/main.js).
+# build — compile all 6 tsup packages (each emits dist/main.js).
 # NEVER prune in the build stage (Pitfall 1/4) — tsup/typescript are dev deps.
 # ---------------------------------------------------------------------------
 FROM deps AS build
