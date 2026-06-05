@@ -120,7 +120,7 @@
   4. A service redeploy (new image push) does not lose in-flight or queued jobs
 **Plans**: 3 plans
 - [x] 06-01-PLAN.md — Wave 1: multi-stage Dockerfile (pinned oven/bun, role-by-command, prod prune) + secret-free .dockerignore + worker liveness heartbeat/healthcheck + full 12-factor .env.example (DEPLOY-01, DEPLOY-03)
-- [ ] 06-02-PLAN.md — deploy-verify smoke script + Coolify deploy runbook (docs/deploy.md)
+- [x] 06-02-PLAN.md — Wave 2: env-driven deploy-verify smoke script (healthz→docs→401→authed audit round-trip) + Coolify deploy runbook docs/deploy.md (DEPLOY-03, DEPLOY-04)
 - [ ] 06-03-PLAN.md — live Coolify deploy + smoke (human-gate dependent)
 
 ### Phase 7: Cron + Consumer Wiring
