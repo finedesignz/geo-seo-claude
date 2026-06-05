@@ -118,7 +118,10 @@
   2. The Coolify service starts, passes `/healthz` (DB reachable), and completes a real `POST /audit` → poll → result round-trip against a live URL
   3. No secret (DATABASE_URL, ANTHROPIC_API_KEY, API auth key) appears in the image or any committed file
   4. A service redeploy (new image push) does not lose in-flight or queued jobs
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 06-01-PLAN.md — Dockerfile + .dockerignore + .env.example + worker heartbeat/healthcheck
+- [ ] 06-02-PLAN.md — deploy-verify smoke script + Coolify deploy runbook (docs/deploy.md)
+- [ ] 06-03-PLAN.md — live Coolify deploy + smoke (human-gate dependent)
 
 ### Phase 7: Cron + Consumer Wiring
 **Goal**: Scheduled re-audits run automatically, hyperoptimizedwebsites imports @geo/core inline, and ottolax triggers on-demand audits over HTTP — both consumers fully wired.
