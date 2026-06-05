@@ -22,7 +22,7 @@ const PollResponse = z
   .object({
     status: z.enum(["queued", "running", "done", "failed"]),
     score: z.number().optional(),
-    findings: z.unknown().optional(),
+    findings: z.record(z.string(), z.unknown()).optional(),
     error_code: z.string().optional(),
   })
   .openapi("AuditPollResult");
@@ -67,23 +67,15 @@ export function registerAuditGet(
       return c.json({ error: "not_found", message: "Job not found" }, 404);
     }
 
-    // Build the DTO explicitly — never spread the raw row.
+    // Build the DTO explicitly — never spread the raw row. Keys are only added
+    // when present so internal columns never leak and the shape stays narrow.
+    const body: z.infer<typeof PollResponse> = { status: job.status };
     if (job.status === "done") {
-      return c.json(
-        {
-          status: "done" as const,
-          score: job.score ?? undefined,
-          findings: job.findings ?? undefined,
-        },
-        200,
-      );
+      if (job.score !== null) body.score = job.score;
+      if (job.findings !== null) body.findings = job.findings as Record<string, unknown>;
+    } else if (job.status === "failed" && job.errorCode !== null) {
+      body.error_code = job.errorCode;
     }
-    if (job.status === "failed") {
-      return c.json(
-        { status: "failed" as const, error_code: job.errorCode ?? undefined },
-        200,
-      );
-    }
-    return c.json({ status: job.status }, 200);
+    return c.json(body, 200);
   });
 }
