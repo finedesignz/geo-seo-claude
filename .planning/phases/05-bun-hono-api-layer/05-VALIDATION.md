@@ -44,18 +44,18 @@ No live socket / no live Anthropic / no live deploy in CI. The Hono app is exerc
 
 | Task ID | Wave | Requirement | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|-------------|-----------------|-----------|-------------------|-------------|--------|
-| 5-W0a | 0 | infra/D-11 | migration `0002_add_consumer_id.sql` applies; DAL `insertJob`/`getJob`/`listJobs` consumer-scoped | int (PGlite) | `bun run --cwd packages/db test -- --run` | ❌ W0 | ⬜ pending |
+| 5-W0a | 0 | infra/D-11 | migration `0002_add_consumer_id.sql` applies; DAL `insertJob`/`getJob`/`listJobs`/`findRecentByUrlHash` consumer-scoped (equality filter; legacy null rows excluded) | int (PGlite) | `bun run --cwd packages/db test -- --run` | ❌ W0 | ⬜ pending |
 | 5-W0b | 0 | infra/D-12 | `@geo/fetch` `validateUrlHost` + SSRF-safe POST export; private host rejected, public allowed | unit (mock resolver) | `bun run --cwd packages/fetch test -- --run` | ❌ W0 | ⬜ pending |
 | 5-W0c | 0 | infra/D-14 | `packages/api` scaffold (OpenAPIHono app, zod v3, Scalar) builds + trivial route test | infra | `bun run --cwd packages/api test -- --run` | ❌ W0 | ⬜ pending |
 | 5-API-05 | 1 | API-05 | every protected route returns **401** on missing/invalid bearer; valid key attaches consumer_id; `/healthz`,`/openapi.json`,`/docs` exempt | int (app.request) | `vitest run auth` | ❌ W0 | ⬜ pending |
 | 5-API-01 | 1 | API-01 | `POST /audit {url}` zod-validates, normalizes, `insertJob`, returns `{job_id}` without blocking; invalid url → 400 | int (app.request+PGlite) | `vitest run audit` | ❌ W0 | ⬜ pending |
-| 5-API-04 | 1 | API-04 | repeat URL within TTL returns cached job_id; prior **failed** job does NOT dedup (re-enqueues) | int (app.request+PGlite) | `vitest run dedup` | ❌ W0 | ⬜ pending |
+| 5-API-04 | 1 | API-04 | repeat URL within TTL **by the same consumer** returns cached job_id; **consumer-scoped** (same URL by a different consumer → new job_id, no cross-consumer dedup); prior **failed** job does NOT dedup (re-enqueues) | int (app.request+PGlite) | `vitest run dedup` | ❌ W0 | ⬜ pending |
 | 5-API-08 | 1 | API-08 | `callback_url` resolving to private IP → **400** at submit (reuse Phase 2 mock resolver) | int (app.request+mock) | `vitest run callback` | ❌ W0 | ⬜ pending |
-| 5-API-02 | 2 | API-02 | `GET /audit/{id}` returns status; done → score+findings; not-found/not-owned → **404** (no cross-consumer read) | int (app.request+PGlite) | `vitest run poll` | ❌ W0 | ⬜ pending |
-| 5-API-03 | 2 | API-03 | `GET /audits` paginated, scoped to authenticated consumer | int (app.request+PGlite) | `vitest run history` | ❌ W0 | ⬜ pending |
+| 5-API-02 | 2 | API-02 | `GET /audit/{id}` returns DTO `{status, score?, findings?, error_code?}` (D-15, no internal cols); done → score+findings; not-found/not-owned → **404** (no cross-consumer read) | int (app.request+PGlite) | `vitest run poll` | ❌ W0 | ⬜ pending |
+| 5-API-03 | 2 | API-03 | `GET /audits` paginated, scoped to authenticated consumer; items are DTOs `{job_id,url,status,score?,created_at}` (D-15, no `callback_url`/`consumer_id`/internal cols) | int (app.request+PGlite) | `vitest run history` | ❌ W0 | ⬜ pending |
 | 5-API-06 | 2 | API-06 | `GET /healthz` → 200 `{db:"ok"}` when DB reachable; **503** `{db:"error"}` when not | int (app.request) | `vitest run healthz` | ❌ W0 | ⬜ pending |
 | 5-API-07 | 2 | API-07 | `GET /openapi.json` valid OpenAPI 3.x (bearer security scheme present); `GET /docs` 200 Scalar; `docs/api.md` generated | int (app.request) | `vitest run openapi` | ❌ W0 | ⬜ pending |
-| 5-API-08b | 2 | API-08 | webhook delivery fires on completion via SSRF-safe POST, re-validates host at fire, non-fatal on failure | unit (mock) | `vitest run webhook` | ❌ W0 | ⬜ pending |
+| 5-API-08b | 2 | API-08 | webhook delivery fires on completion via SSRF-safe POST, re-validates host at fire, no-redirect-into-private + response-size cap + bounded timeout/retries (D-12), non-fatal on failure | unit (mock) | `vitest run webhook` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -76,7 +76,7 @@ No live socket / no live Anthropic / no live deploy in CI. The Hono app is exerc
 | Threat | STRIDE | Mitigation (test-asserted) |
 |--------|--------|----------------------------|
 | Anonymous access | Spoofing/Elevation | bearer middleware → 401 on every protected route (5-API-05) |
-| Cross-consumer data read | Info disclosure | getJob/listJobs scoped to consumer_id → 404 on others' jobs (5-API-02/03) |
+| Cross-consumer data read | Info disclosure | getJob/listJobs scoped to consumer_id → 404 on others' jobs; dedup (findRecentByUrlHash) consumer-scoped → never returns another consumer's job_id (5-API-02/03/04); responses are DTOs excluding internal columns (D-15) |
 | SSRF via callback_url | Elevation | `validateUrlHost` at submit (400) + re-validate at fire; reuse Phase 2 guard (5-API-08/08b) |
 | API key exposure | Info disclosure | `GEO_API_KEYS` env-only, fail-fast at startup; never committed |
 | Input injection | Tampering | zod request validation on every route (400) |

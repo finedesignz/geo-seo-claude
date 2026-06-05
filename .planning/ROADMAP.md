@@ -98,7 +98,7 @@
   1. `POST /audit` with a valid bearer token and URL returns `{ job_id }` immediately; the same URL within TTL returns the cached job_id
   2. `GET /audit/{job_id}` returns `{ status: "done", score: <number>, findings: {...} }` when the worker has finished
   3. `GET /audits` returns a paginated list of past audits for the authenticated consumer
-  4. An unauthenticated request to any endpoint returns 401 (not 200 or 404)
+  4. An unauthenticated request to any **data/business** endpoint (POST /audit, GET /audit/{id}, GET /audits) returns 401; `/healthz`, `/openapi.json`, and `/docs` are intentionally public (amended 2026-06-04 per auth-policy decision; see 05-CONTEXT D-03)
   5. `GET /healthz` returns 200 with `{ db: "ok" }` when Postgres is reachable, and a non-200 when it is not
   6. `GET /openapi.json` returns a valid OpenAPI 3.x document; `GET /docs` renders Scalar UI
   7. A `callback_url` on submit is called with job result on completion and is rejected if it resolves to a private IP (same SSRF guard)
