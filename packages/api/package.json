@@ -1,0 +1,44 @@
+{
+  "name": "@geo/api",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "bin": {
+    "geo-api": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@geo/core": "workspace:*",
+    "@geo/db": "workspace:*",
+    "@geo/fetch": "workspace:*",
+    "@hono/zod-openapi": "0.19.10",
+    "@scalar/hono-api-reference": "0.10.20",
+    "hono": "4.12.23",
+    "zod": "3.25.51"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.1",
+    "@types/node": "25.9.1",
+    "tsup": "8.5.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.8"
+  }
+}
