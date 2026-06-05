@@ -23,7 +23,8 @@
   },
   "scripts": {
     "build": "tsup",
-    "test": "vitest"
+    "test": "vitest",
+    "gen-docs": "bun run scripts/gen-docs.ts"
   },
   "dependencies": {
     "@geo/core": "workspace:*",
