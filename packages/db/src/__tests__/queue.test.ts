@@ -152,40 +152,110 @@ describe("findRecentByUrlHash", () => {
 
   it("returns the most recent job within TTL", async () => {
     const dal = createAuditDal(makePgliteExecutor(db));
-    const job = await dal.insertJob({ url: "https://dedup.com", normalizedUrl: "https://dedup.com", urlHash: "dedup-hash" });
+    const job = await dal.insertJob({ url: "https://dedup.com", normalizedUrl: "https://dedup.com", urlHash: "dedup-hash", consumerId: "ottolax" });
 
-    const found = await dal.findRecentByUrlHash("dedup-hash", 60_000); // 60s TTL
+    const found = await dal.findRecentByUrlHash("dedup-hash", 60_000, "ottolax"); // 60s TTL
     expect(found).not.toBeNull();
     expect(found!.id).toBe(job.id);
   });
 
   it("returns null when no job exists with that hash", async () => {
     const dal = createAuditDal(makePgliteExecutor(db));
-    const found = await dal.findRecentByUrlHash("nonexistent-hash", 60_000);
+    const found = await dal.findRecentByUrlHash("nonexistent-hash", 60_000, "ottolax");
     expect(found).toBeNull();
   });
 
   it("returns null when the job is outside the TTL window", async () => {
     const dal = createAuditDal(makePgliteExecutor(db));
-    await dal.insertJob({ url: "https://old.com", normalizedUrl: "https://old.com", urlHash: "old-hash" });
+    await dal.insertJob({ url: "https://old.com", normalizedUrl: "https://old.com", urlHash: "old-hash", consumerId: "ottolax" });
 
     // Move created_at back by 2 minutes
     await db.exec(`UPDATE audits SET created_at = now() - interval '2 minutes' WHERE url_hash = 'old-hash'`);
 
     // TTL = 60s → row is 120s old → outside window
-    const found = await dal.findRecentByUrlHash("old-hash", 60_000);
+    const found = await dal.findRecentByUrlHash("old-hash", 60_000, "ottolax");
     expect(found).toBeNull();
   });
 
   it("returns most recent row when multiple exist", async () => {
     const dal = createAuditDal(makePgliteExecutor(db));
-    const j1 = await dal.insertJob({ url: "https://multi.com", normalizedUrl: "https://multi.com", urlHash: "multi-hash" });
+    const j1 = await dal.insertJob({ url: "https://multi.com", normalizedUrl: "https://multi.com", urlHash: "multi-hash", consumerId: "ottolax" });
     await new Promise((r) => setTimeout(r, 10));
-    const j2 = await dal.insertJob({ url: "https://multi.com", normalizedUrl: "https://multi.com", urlHash: "multi-hash" });
+    const j2 = await dal.insertJob({ url: "https://multi.com", normalizedUrl: "https://multi.com", urlHash: "multi-hash", consumerId: "ottolax" });
 
-    const found = await dal.findRecentByUrlHash("multi-hash", 60_000);
+    const found = await dal.findRecentByUrlHash("multi-hash", 60_000, "ottolax");
     expect(found!.id).toBe(j2.id); // most recent
     expect(found!.id).not.toBe(j1.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Consumer scoping (D-11): migration 0002 + DAL consumer_id
+// ---------------------------------------------------------------------------
+
+describe("consumer scoping (D-11)", () => {
+  let db: DbHandle;
+
+  beforeEach(async () => {
+    db = await makePgliteDb();
+    await runMigrations(db, MIGRATIONS_DIR);
+  });
+
+  afterEach(async () => {
+    await db.close();
+  });
+
+  it("insertJob persists consumer_id and getJob returns it", async () => {
+    const dal = createAuditDal(makePgliteExecutor(db));
+    const job = await dal.insertJob({ url: "https://c.com", normalizedUrl: "https://c.com", urlHash: "c-h", consumerId: "ottolax" });
+    expect(job.consumerId).toBe("ottolax");
+
+    const fetched = await dal.getJob(job.id);
+    expect(fetched!.consumerId).toBe("ottolax");
+  });
+
+  it("insertJob without consumerId stores null (back-compat)", async () => {
+    const dal = createAuditDal(makePgliteExecutor(db));
+    const job = await dal.insertJob({ url: "https://n.com", normalizedUrl: "https://n.com", urlHash: "n-h" });
+    expect(job.consumerId).toBeNull();
+  });
+
+  it("listJobs with consumerId returns only that consumer's rows", async () => {
+    const dal = createAuditDal(makePgliteExecutor(db));
+    await dal.insertJob({ url: "https://o1.com", normalizedUrl: "https://o1.com", urlHash: "o1", consumerId: "ottolax" });
+    await dal.insertJob({ url: "https://h1.com", normalizedUrl: "https://h1.com", urlHash: "h1", consumerId: "how" });
+    await dal.insertJob({ url: "https://legacy.com", normalizedUrl: "https://legacy.com", urlHash: "lg" }); // null consumer
+
+    const ottolax = await dal.listJobs({ limit: 100, offset: 0, consumerId: "ottolax" });
+    expect(ottolax.length).toBe(1);
+    expect(ottolax[0]!.consumerId).toBe("ottolax");
+  });
+
+  it("listJobs without consumerId returns all rows (back-compat)", async () => {
+    const dal = createAuditDal(makePgliteExecutor(db));
+    await dal.insertJob({ url: "https://o2.com", normalizedUrl: "https://o2.com", urlHash: "o2", consumerId: "ottolax" });
+    await dal.insertJob({ url: "https://h2.com", normalizedUrl: "https://h2.com", urlHash: "h2", consumerId: "how" });
+    await dal.insertJob({ url: "https://lg2.com", normalizedUrl: "https://lg2.com", urlHash: "lg2" });
+
+    const all = await dal.listJobs({ limit: 100, offset: 0 });
+    expect(all.length).toBe(3);
+  });
+
+  it("findRecentByUrlHash is consumer-scoped (equality, legacy null excluded)", async () => {
+    const dal = createAuditDal(makePgliteExecutor(db));
+    // same url_hash, three owners
+    await dal.insertJob({ url: "https://s.com", normalizedUrl: "https://s.com", urlHash: "shared", consumerId: "how" });
+    await dal.insertJob({ url: "https://s.com", normalizedUrl: "https://s.com", urlHash: "shared" }); // legacy null
+    const mine = await dal.insertJob({ url: "https://s.com", normalizedUrl: "https://s.com", urlHash: "shared", consumerId: "ottolax" });
+
+    // ottolax only sees its own row
+    const forOttolax = await dal.findRecentByUrlHash("shared", 60_000, "ottolax");
+    expect(forOttolax!.id).toBe(mine.id);
+    expect(forOttolax!.consumerId).toBe("ottolax");
+
+    // a consumer with no matching row gets null (does NOT match how's or the legacy null row)
+    const forOther = await dal.findRecentByUrlHash("shared", 60_000, "nobody");
+    expect(forOther).toBeNull();
   });
 });
 

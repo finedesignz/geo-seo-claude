@@ -52,6 +52,7 @@ interface AuditRow extends Record<string, unknown> {
   findings: FindingsShape | null;
   error_code: string | null;
   callback_url: string | null;
+  consumer_id: string | null;
   attempts: number;
   locked_at: Date | string | null;
   lease_expires_at: Date | string | null;
@@ -99,6 +100,7 @@ function rowToJob(row: AuditRow): AuditJob {
     findings,
     errorCode: row.error_code ?? null,
     callbackUrl: row.callback_url ?? null,
+    consumerId: row.consumer_id ?? null,
     attempts: row.attempts,
     lockedAt: toDate(row.locked_at),
     leaseExpiresAt: toDate(row.lease_expires_at),
@@ -130,7 +132,7 @@ export interface AuditDal {
   renewLease(id: string, leaseToken: string, secs: number): Promise<boolean>;
   getJob(id: string): Promise<AuditJob | null>;
   listJobs(pagination: PaginationInput): Promise<AuditJob[]>;
-  findRecentByUrlHash(urlHash: string, ttlMs: number): Promise<AuditJob | null>;
+  findRecentByUrlHash(urlHash: string, ttlMs: number, consumerId: string): Promise<AuditJob | null>;
   reclaimExpired(maxAttempts?: number): Promise<number>;
 }
 
@@ -163,10 +165,10 @@ export function createAuditDal(executor: SqlExecutor): AuditDal {
     // -------------------------------------------------------------------------
     async insertJob(input: InsertJobInput): Promise<AuditJob> {
       const rows = await executor.query<AuditRow>(
-        `INSERT INTO audits (url, normalized_url, url_hash, callback_url)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO audits (url, normalized_url, url_hash, callback_url, consumer_id)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [input.url, input.normalizedUrl, input.urlHash, input.callbackUrl ?? null],
+        [input.url, input.normalizedUrl, input.urlHash, input.callbackUrl ?? null, input.consumerId ?? null],
       );
       const row = rows[0];
       if (!row) throw new Error("insertJob: no row returned");
@@ -317,11 +319,15 @@ export function createAuditDal(executor: SqlExecutor): AuditDal {
     // listJobs — paginated, most recent first
     // -------------------------------------------------------------------------
     async listJobs(pagination: PaginationInput): Promise<AuditJob[]> {
+      // Consumer scoping (D-11): when consumerId is provided, return ONLY that
+      // consumer's rows (equality — legacy null rows excluded). When omitted
+      // ($3 IS NULL), return all rows for back-compat.
       const rows = await executor.query<AuditRow>(
         `SELECT * FROM audits
+          WHERE ($3::text IS NULL OR consumer_id = $3)
           ORDER BY created_at DESC
           LIMIT $1 OFFSET $2`,
-        [pagination.limit, pagination.offset],
+        [pagination.limit, pagination.offset, pagination.consumerId ?? null],
       );
       return rows.map(rowToJob);
     },
@@ -329,15 +335,19 @@ export function createAuditDal(executor: SqlExecutor): AuditDal {
     // -------------------------------------------------------------------------
     // findRecentByUrlHash — dedup support (Phase 5 API-04)
     // -------------------------------------------------------------------------
-    async findRecentByUrlHash(urlHash: string, ttlMs: number): Promise<AuditJob | null> {
+    async findRecentByUrlHash(urlHash: string, ttlMs: number, consumerId: string): Promise<AuditJob | null> {
       const ttlSecs = ttlMs / 1000;
+      // Consumer-scoped dedup (D-04/D-11): equality filter only. Legacy
+      // null-consumer rows must NOT match, and one consumer must never dedup
+      // against another consumer's job.
       const rows = await executor.query<AuditRow>(
         `SELECT * FROM audits
-          WHERE url_hash  = $1
+          WHERE url_hash    = $1
+            AND consumer_id = $3
             AND created_at > now() - ($2::numeric * interval '1 second')
           ORDER BY created_at DESC
           LIMIT 1`,
-        [urlHash, ttlSecs],
+        [urlHash, ttlSecs, consumerId],
       );
       if (rows.length === 0) return null;
       return rowToJob(rows[0]!);

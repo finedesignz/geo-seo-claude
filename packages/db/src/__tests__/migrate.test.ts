@@ -36,9 +36,9 @@ afterEach(async () => {
 // ---------------------------------------------------------------------------
 
 describe("runMigrations", () => {
-  it("applies 0001 on a fresh DB and returns the version", async () => {
+  it("applies all migrations on a fresh DB and returns the versions", async () => {
     const applied = await runMigrations(db, MIGRATIONS_DIR);
-    expect(applied).toEqual(["0001_create_audits"]);
+    expect(applied).toEqual(["0001_create_audits", "0002_add_consumer_id"]);
   });
 
   it("is idempotent — second call applies nothing", async () => {
@@ -50,7 +50,7 @@ describe("runMigrations", () => {
   it("listApplied shows applied version after migrate", async () => {
     await runMigrations(db, MIGRATIONS_DIR);
     const versions = await listApplied(db);
-    expect(versions).toEqual(["0001_create_audits"]);
+    expect(versions).toEqual(["0001_create_audits", "0002_add_consumer_id"]);
   });
 
   it("listApplied returns [] before any migration", async () => {

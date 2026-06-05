@@ -47,6 +47,8 @@ export interface AuditJob {
   findings: FindingsShape | null;
   errorCode: string | null;
   callbackUrl: string | null;
+  /** Owning consumer (D-11). Null for legacy pre-auth rows. */
+  consumerId: string | null;
   attempts: number;
   lockedAt: Date | null;
   leaseExpiresAt: Date | null;
@@ -66,9 +68,13 @@ export interface InsertJobInput {
   normalizedUrl: string;
   urlHash: string;
   callbackUrl?: string;
+  /** Owning consumer (D-11). Omitted → stored as NULL (back-compat). */
+  consumerId?: string;
 }
 
 export interface PaginationInput {
   limit: number;
   offset: number;
+  /** Scope history to this consumer (D-11). Omitted → all rows (back-compat). */
+  consumerId?: string;
 }
