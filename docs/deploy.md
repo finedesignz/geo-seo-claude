@@ -1,0 +1,157 @@
+# Deploy Runbook — `@geo/api` + `@geo/worker` on Coolify
+
+How to deploy the GEO audit service to Coolify (Postgres on Coolify per global rule 17)
+and prove the deploy is live. Authored without a live resource — Phase 6 plan 03 (and
+Phase 7) executes against it. **Leave UUIDs/secrets as placeholders; the operator fills them.**
+
+> Legend: **[HUMAN GATE]** = operator does it in the Coolify UI (one-time / credentialed).
+> **[AUTOMATABLE]** = doable via the Coolify API with the token in `~/.claude/secrets/services.json`.
+
+---
+
+## Overview — one image, three run targets
+
+Plan 01 ships a single multi-stage `Dockerfile` (`oven/bun:1.3.1-slim`) that builds the
+whole Bun workspace. The **role is chosen by the start-command override** — there is no
+entrypoint branch script (D-01 / D-03):
+
+| Run target | Start command (override)              | Network    | Health                                   |
+|------------|---------------------------------------|------------|------------------------------------------|
+| API        | _default CMD_ `bun packages/api/dist/main.js` | HTTP (8080) | `GET /healthz`                           |
+| Worker     | `bun packages/worker/dist/main.js`    | none       | exec `scripts/worker-healthcheck.sh` (heartbeat) |
+| Migrate    | `bun packages/db/scripts/migrate.ts`  | none       | one-shot (Pre-deployment command, below) |
+
+All three run **the same image / repo / branch** — only the command and resource settings differ.
+
+---
+
+## Human Gate (operator, Coolify UI)
+
+### 1. Provision app + Postgres  **[HUMAN GATE]**
+
+1. New **Project / Application** → Build Pack = **Dockerfile**, source = this repo, branch
+   = the deploy branch (e.g. `main`). Dockerfile path = repo-root `Dockerfile`.
+2. Add a **PostgreSQL** resource in the same project (one Postgres per app, rule 17).
+3. Capture for later: the **API app UUID**, the **worker app UUID**, and Coolify's
+   **internal `DATABASE_URL`** for the Postgres resource (use the internal/service hostname,
+   not the public proxy).
+
+> Placeholders to record (do NOT commit): `<API_APP_UUID>`, `<WORKER_APP_UUID>`,
+> `<DATABASE_URL>`.
+
+### 2. Set env secrets per resource  **[HUMAN GATE]**
+
+Enter in the Coolify UI — **never committed**. Names/defaults come from `.env.example`
+(plan 01). Required + relevant per resource:
+
+| Var                    | API | Worker | Migrate | Notes                                              |
+|------------------------|:---:|:------:|:-------:|----------------------------------------------------|
+| `DATABASE_URL`         |  ✔  |   ✔    |    ✔    | Coolify-internal Postgres URL (secret)             |
+| `ANTHROPIC_API_KEY`    |     |   ✔    |         | scoring model key (secret; worker only)            |
+| `GEO_API_KEYS`         |  ✔  |        |         | bearer allow-list `token:consumer_id,...` (secret) |
+| `PORT`                 |  ✔  |        |         | default 8080 (match the resource's HTTP port)      |
+| `SHUTDOWN_GRACE_MS`    |     |   ✔    |         | default 30000 — see stop grace (step 4)            |
+| `SCORING_MODEL`        |     |   ✔    |         | optional override                                  |
+| worker poll knobs      |     |   ✔    |         | `CONCURRENCY`, `POLL_INTERVAL_MS`, `LEASE_TTL_SECONDS`, `RECLAIM_INTERVAL_MS`, `MAX_ATTEMPTS`, `SCORING_TIMEOUT_MS`, `WORKER_HEARTBEAT_FILE` (defaults in `.env.example`) |
+
+The bearer used by `deploy-verify.sh` (`GEO_API_TOKEN`) is the **token part before the `:`**
+of one `GEO_API_KEYS` entry.
+
+### 3. Two Application resources off the same image  **[HUMAN GATE]**
+
+Create **two** Application resources from the same repo/Dockerfile:
+
+- **API resource** — default CMD (no override). Expose HTTP **8080**. Set the
+  **HTTP health check** to path `/healthz` (expects 200 `{"db":"ok"}`, public/auth-exempt).
+- **Worker resource** — **start command override** `bun packages/worker/dist/main.js`.
+  **No HTTP port.** Set health to an **exec** check running `scripts/worker-healthcheck.sh`
+  (file-based heartbeat liveness, plan 01). _Confirm in Coolify UI_ (Q2): if a per-resource
+  exec health check is unavailable, fall back to **restart-on-exit** — D-06 accepts this,
+  since the worker process exits on fatal error.
+
+### 4. Worker stop grace ≥ `SHUTDOWN_GRACE_MS`  **[HUMAN GATE]**
+
+Set the **worker resource container stop grace period ≥ 30s** (≥ `SHUTDOWN_GRACE_MS`,
+default 30000). Docker's default 10s is too short and would SIGKILL mid-drain (D-09,
+success criterion #4). _Confirm the exact UI field in Coolify_ (Q4). The worker installs
+SIGTERM/SIGINT handlers and drains in-flight audits within this window.
+
+---
+
+## Migrations (D-05)
+
+Run the schema migration **before/at first deploy** and on every deploy. The runner is
+**advisory-locked + idempotent**, so concurrent/repeat runs are safe:
+
+- **Preferred:** set the **API resource Pre-deployment command** to
+  `bun packages/db/scripts/migrate.ts`. Coolify runs it in the freshly-built image before
+  cutting traffic over.
+- **Fallback:** a guarded boot-time run (first replica acquires the advisory lock; others
+  no-op). Use only if Pre-deployment commands are unavailable.
+
+Never run destructive DB ops here — migrate only applies the committed, reviewed SQL in
+`packages/db/migrations/**` (retained in the image; see `.dockerignore`).
+
+---
+
+## PID-1 / signal handling (D-09, Q3)
+
+Bun is PID 1 via exec-form CMD and `STOPSIGNAL` is `SIGTERM`. To guarantee zombie reaping
++ clean signal forwarding:
+
+- **Preferred:** enable Coolify's **`--init`** toggle per resource if exposed.
+- **Fallback:** uncomment the `tini` `ENTRYPOINT` block in the `Dockerfile` and rebuild.
+
+The worker's SIGTERM/SIGINT handlers + the stop-grace window (step 4) give a clean drain.
+
+---
+
+## Automatable (Coolify API)  **[AUTOMATABLE]**
+
+Trigger a redeploy and poll status with the API token from `~/.claude/secrets/services.json`:
+
+```bash
+# UUID from the resource's Coolify URL / step 1 capture.
+curl -fsS -X POST \
+  -H "Authorization: Bearer <COOLIFY_API_TOKEN>" \
+  "https://coolify.titaniumlabs.us/api/v1/deploy?uuid=<API_APP_UUID>"
+# repeat with <WORKER_APP_UUID> for the worker resource.
+```
+
+Poll the deployment/resource status endpoint until the deploy reports success, then verify.
+
+---
+
+## Verify (D-08, DEPLOY-04, rule 14)
+
+**Never claim "shipped" on `/healthz` alone.** After both resources are up, run the live
+smoke test against the deployed API:
+
+```bash
+GEO_API_BASE="https://<deployed-api-origin>" \
+GEO_API_TOKEN="<token-part-of-a-GEO_API_KEYS-entry>" \
+  bash scripts/deploy-verify.sh
+```
+
+It polls `/healthz`, probes `/openapi.json` + `/docs`, asserts unauth `POST /audit` → 401,
+submits an authed audit, and polls `GET /audit/{job_id}` to `done`. Exit 0 = deploy proven.
+
+---
+
+## Redeploy safety (success criterion #4)
+
+In-flight audits are **not lost across redeploys**: jobs are durable in Postgres (Phase 3/4
+queue with lease + reclaim). On SIGTERM the worker drains within `SHUTDOWN_GRACE_MS`; any
+job not finished in time keeps its row and is reclaimed by the next worker after its lease
+expires. **Requirement:** worker stop grace ≥ `SHUTDOWN_GRACE_MS` (step 4) — otherwise a
+SIGKILL mid-audit leaves the job leased until reclaim, adding latency (never data loss).
+
+---
+
+## Open questions to confirm in Coolify UI
+
+| Q  | Confirm |
+|----|---------|
+| Q2 | per-resource **exec** health check for the worker (else restart-on-exit fallback) |
+| Q3 | `--init` toggle exposure (else tini ENTRYPOINT fallback) |
+| Q4 | exact **container stop grace** field name/location for the worker resource |
