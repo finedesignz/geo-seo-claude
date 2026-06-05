@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 7 context gathered
-last_updated: "2026-06-05T03:19:35.737Z"
+stopped_at: Completed 07-01-PLAN.md (Wave 1 — @geo/cron)
+last_updated: "2026-06-04T20:40:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 23
-  completed_plans: 23
-  percent: 86
+  total_plans: 24
+  completed_plans: 24
+  percent: 87
 ---
 
 # Project State: geo-api
@@ -84,6 +84,7 @@ Progress: [█████████░] 94%
 | 06-01 Wave 1: Dockerfile + .dockerignore + worker heartbeat/healthcheck + .env.example | ~15 min | 3 | 5 |
 | 06-02 Wave 2: deploy-verify smoke script + Coolify deploy runbook | ~12 min | 2 | 2 |
 | 06-03 Wave 3: live deploy DEFERRED-LIVE (human gate) — DEPLOY-RECORD.md | ~8 min | 1 | 1 |
+| 07-01 Wave 1: @geo/cron one-shot caller (env fail-fast + runCron loop + in-process app/PGlite tests) — DEPLOY-02 | ~20 min | 2 | 11 |
 
 ---
 
@@ -152,9 +153,9 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-06-05T03:19:35.729Z
-**Stopped at:** Phase 7 context gathered
-**Next action:** Phase 4 — Worker Pipeline (claim/complete/fail/reclaim wiring + scoring)
+**Last session:** 2026-06-04T20:40:00.000Z
+**Stopped at:** Completed 07-01-PLAN.md (Wave 1 — @geo/cron caller; DEPLOY-02 code+tests, live firing DEFERRED-LIVE)
+**Next action:** Phase 7 Wave 2 — 07-02 (cron run target: Dockerfile/.env.example/Coolify runbook) + 07-03 (consumer artifacts)
 
 ---
 *State initialized: 2026-06-01*
