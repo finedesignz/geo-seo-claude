@@ -36,6 +36,23 @@
         "vitest": "4.1.8",
       },
     },
+    "packages/cron": {
+      "name": "@geo/cron",
+      "version": "0.1.0",
+      "bin": {
+        "geo-cron": "./dist/main.js",
+      },
+      "devDependencies": {
+        "@electric-sql/pglite": "0.5.1",
+        "@geo/api": "workspace:*",
+        "@geo/db": "workspace:*",
+        "@geo/fetch": "workspace:*",
+        "@types/node": "25.9.1",
+        "tsup": "8.5.1",
+        "typescript": "6.0.3",
+        "vitest": "4.1.8",
+      },
+    },
     "packages/db": {
       "name": "@geo/db",
       "version": "0.1.0",
@@ -158,6 +175,8 @@
     "@geo/api": ["@geo/api@workspace:packages/api"],
 
     "@geo/core": ["@geo/core@workspace:packages/core"],
+
+    "@geo/cron": ["@geo/cron@workspace:packages/cron"],
 
     "@geo/db": ["@geo/db@workspace:packages/db"],
 
