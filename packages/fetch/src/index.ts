@@ -10,3 +10,5 @@ export type { FetchErrorCode as FetchErrorCodeType } from "./errors.js";
 export { isBlockedIP } from "./ip-validator.js";
 export { createSafeFetcher } from "./safe-fetcher.js";
 export type { SafeFetcherOptions } from "./safe-fetcher.js";
+export { createSafeRequester, validateUrlHost } from "./safe-requester.js";
+export type { SafeRequesterOptions, SafeRequestInput, HostValidationResult } from "./safe-requester.js";

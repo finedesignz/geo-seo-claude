@@ -85,19 +85,24 @@ function effectivePort(url: URL): number {
 // Internal: validate a single URL and build a pinned request target
 // ---------------------------------------------------------------------------
 
-interface ValidationResult {
+export interface ValidationResult {
   ok: true;
   parsedUrl: URL;
   pinnedIp: string;
   hostHeader: string;
 }
 
-interface ValidationError {
+export interface ValidationError {
   ok: false;
   code: FetchErrorCode;
 }
 
-async function validateUrl(
+/**
+ * Validate a raw URL and return a pinned-IP request target (resolve-then-pin).
+ * Exported so the SSRF-safe POST path (safe-requester.ts) reuses the SAME
+ * scheme/port/userinfo/DNS+IP-classification validator — no duplication.
+ */
+export async function validateUrl(
   rawUrl: string,
   allowedPorts: number[],
   resolver: Resolver | undefined,
