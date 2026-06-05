@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-01-PLAN.md (Wave 1 — @geo/cron)
-last_updated: "2026-06-04T20:40:00.000Z"
+stopped_at: Completed 07-02-PLAN.md (Wave 2 — cron run target + runbook)
+last_updated: "2026-06-04T21:05:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 6
@@ -85,6 +85,7 @@ Progress: [█████████░] 94%
 | 06-02 Wave 2: deploy-verify smoke script + Coolify deploy runbook | ~12 min | 2 | 2 |
 | 06-03 Wave 3: live deploy DEFERRED-LIVE (human gate) — DEPLOY-RECORD.md | ~8 min | 1 | 1 |
 | 07-01 Wave 1: @geo/cron one-shot caller (env fail-fast + runCron loop + in-process app/PGlite tests) — DEPLOY-02 | ~20 min | 2 | 11 |
+| 07-02 Wave 2: cron run target (Dockerfile manifest copy) + .env.example CRON block + deploy.md scheduled-task runbook — DEPLOY-02/03 | ~8 min | 2 | 3 |
 
 ---
 
@@ -131,6 +132,7 @@ Progress: [█████████░] 94%
 - 06-01: one image, role by start-command override (no entrypoint branch); no global Dockerfile HEALTHCHECK (per-resource in Coolify); worker liveness = file heartbeat
 - 06-02: deploy-verify.sh env-only (GEO_API_BASE/GEO_API_TOKEN, no hardcode); runbook splits [HUMAN GATE] Coolify UI vs [AUTOMATABLE] Coolify API; UUIDs left as placeholders for plan 03/Phase 7
 - 06-03: live deploy DEFERRED-LIVE (gate-deferred) — no Coolify app/Postgres provisioned, branch unpushed (third-party origin), secrets absent; operator/human gate (rule 9). All artifacts ship; DEPLOY-04 + Phase-5 live items → Phase-7 precondition discharged by operator deploy-verify.sh run
+- 07-02: cron is the fourth run target off the SAME image — only a deps-stage manifest COPY added (no new stage/CMD); role-by-command preserved. CRON_SCHEDULE is informational (Coolify Scheduled-Task field is the real clock). Hard cadence constraint: must fire <1h or DEDUP_TTL (1h, no force flag) silently dedups. Live firing DEFERRED-LIVE behind operator deploy
 
 ### Architecture Pointers
 
@@ -153,9 +155,9 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-06-04T20:40:00.000Z
-**Stopped at:** Completed 07-01-PLAN.md (Wave 1 — @geo/cron caller; DEPLOY-02 code+tests, live firing DEFERRED-LIVE)
-**Next action:** Phase 7 Wave 2 — 07-02 (cron run target: Dockerfile/.env.example/Coolify runbook) + 07-03 (consumer artifacts)
+**Last session:** 2026-06-04T21:05:00.000Z
+**Stopped at:** Completed 07-02-PLAN.md (Wave 2 — cron run target Dockerfile/.env.example/deploy.md runbook; DEPLOY-02/03, live firing DEFERRED-LIVE)
+**Next action:** Phase 7 — 07-03 (consumer artifacts: examples/how-inline-usage.ts CONS-01, examples/ottolax-client.py + docs/consumers.md CONS-02)
 
 ---
 *State initialized: 2026-06-01*
