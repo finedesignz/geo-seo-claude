@@ -3,6 +3,15 @@
   "configVersion": 1,
   "workspaces": {
     "": {},
+    "examples": {
+      "name": "@geo/examples",
+      "dependencies": {
+        "@geo/core": "workspace:*",
+      },
+      "devDependencies": {
+        "vitest": "4.1.8",
+      },
+    },
     "packages/api": {
       "name": "@geo/api",
       "version": "0.1.0",
@@ -179,6 +188,8 @@
     "@geo/cron": ["@geo/cron@workspace:packages/cron"],
 
     "@geo/db": ["@geo/db@workspace:packages/db"],
+
+    "@geo/examples": ["@geo/examples@workspace:examples"],
 
     "@geo/fetch": ["@geo/fetch@workspace:packages/fetch"],
 
