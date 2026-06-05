@@ -42,11 +42,11 @@ Prerequisite — nothing that accepts a URL ships before this.
 
 ### API (Bun + Hono service)
 
-- [ ] **API-01**: `POST /audit {url}` validates input and returns `{ job_id }` (async; does not block on the audit)
+- [x] **API-01**: `POST /audit {url}` validates input and returns `{ job_id }` (async; does not block on the audit)
 - [ ] **API-02**: `GET /audit/{job_id}` returns status, and on completion the 0–100 score + findings
 - [ ] **API-03**: `GET /audits` lists audit history with pagination
-- [ ] **API-04**: Recent-audit dedup/caching: a repeat audit of the same URL within a TTL returns the cached result instead of re-running
-- [ ] **API-05**: All endpoints require auth (bearer/API key); consumer apps authenticate, no anonymous access
+- [x] **API-04**: Recent-audit dedup/caching: a repeat audit of the same URL within a TTL returns the cached result instead of re-running
+- [x] **API-05**: All endpoints require auth (bearer/API key); consumer apps authenticate, no anonymous access
 - [ ] **API-06**: `GET /healthz` returns a deep health signal (DB reachable), not just process-up
 - [ ] **API-07**: Service exposes `/openapi.json` + `/docs` (Scalar) per global rule 21
 - [ ] **API-08**: A `callback_url` (webhook) on submit is notified on job completion, and the `callback_url` passes the SAME SSRF check as the audit URL
@@ -123,11 +123,11 @@ Prerequisite — nothing that accepts a URL ships before this.
 | WORK-02 | Phase 4: Worker Pipeline | Complete |
 | WORK-03 | Phase 4: Worker Pipeline | Complete |
 | WORK-04 | Phase 4: Worker Pipeline | Complete |
-| API-01 | Phase 5: Bun+Hono API Layer | Pending |
+| API-01 | Phase 5: Bun+Hono API Layer | Complete (05-01) |
 | API-02 | Phase 5: Bun+Hono API Layer | Pending |
 | API-03 | Phase 5: Bun+Hono API Layer | Pending |
-| API-04 | Phase 5: Bun+Hono API Layer | Pending |
-| API-05 | Phase 5: Bun+Hono API Layer | Pending |
+| API-04 | Phase 5: Bun+Hono API Layer | Complete (05-01) |
+| API-05 | Phase 5: Bun+Hono API Layer | Complete (05-01) |
 | API-06 | Phase 5: Bun+Hono API Layer | Pending |
 | API-07 | Phase 5: Bun+Hono API Layer | Pending |
 | API-08 | Phase 5: Bun+Hono API Layer | Pending |

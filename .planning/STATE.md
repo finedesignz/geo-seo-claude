@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 Plan 00 complete (Wave 0 prereqs — consumer_id DAL, SSRF POST, @geo/api scaffold)
-last_updated: "2026-06-05T19:08:00.000Z"
+stopped_at: Phase 5 Plan 01 complete (Wave 1 — bearer auth + POST /audit)
+last_updated: "2026-06-05T19:15:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 20
-  completed_plans: 18
-  percent: 60
+  completed_plans: 19
+  percent: 63
 ---
 
 # Project State: geo-api
@@ -27,7 +27,7 @@ progress:
 ## Current Position
 
 Phase: 05 (bun-hono-api-layer) — EXECUTING
-Plan: 1 of 3 COMPLETE (Wave 0 prereqs)
+Plan: 2 of 3 COMPLETE (Wave 0 prereqs + Wave 1 auth/submit)
 **Phase:** 3 — Postgres Schema & Durable Job Queue — EXECUTING
 **Plan:** Plan 02 COMPLETE — typed DAL + SKIP LOCKED claim + lifecycle/queue/concurrency tests (DATA-01, DATA-02, WORK-01)
 **Status:** Executing Phase 05
@@ -77,6 +77,7 @@ Progress: [█████████░] 94%
 | 03-01 migration runner + 0001_create_audits schema | ~15 min | 2 | 5 |
 | 03-02 typed DAL + SKIP LOCKED claim + lease fencing + tests | ~20 min | 3 | 7 |
 | 05-00 Wave 0: consumer_id DAL + SSRF POST + @geo/api scaffold | ~25 min | 3 | 19 |
+| 05-01 Wave 1: bearer auth + POST /audit (validate/dedup/SSRF) | ~20 min | 2 | 8 |
 
 ---
 
@@ -111,6 +112,10 @@ Progress: [█████████░] 94%
 - 05-00: @hono/zod-openapi@0.19.10 + @scalar/hono-api-reference@0.10.20 keep zod v3 (3.25.51); Scalar's nested zod v4 is isolated
 - 05-00: validateUrl exported from safe-fetcher and reused by safe-requester (SSRF POST), no validator duplication
 - 05-00: createApp({dal,fetcher}) DI factory — no module-level singleton DAL
+- 05-01: GEO_API_KEYS parse splits on FIRST unescaped ':'; backslash escaping for ','/':'-bearing tokens (D-03)
+- 05-01: token compare = sha256 both sides → timingSafeEqual (length-safe, all-keys iteration for timing)
+- 05-01: DEDUP_TTL_MS=1h; consumer-scoped dedup skips status==='failed' (re-enqueue, D-13)
+- 05-01: callbackResolver injected via AppDeps so submit-time SSRF check is testable without network
 
 ### Architecture Pointers
 

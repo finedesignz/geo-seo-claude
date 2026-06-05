@@ -103,8 +103,8 @@
   6. `GET /openapi.json` returns a valid OpenAPI 3.x document; `GET /docs` renders Scalar UI
   7. A `callback_url` on submit is called with job result on completion and is rejected if it resolves to a private IP (same SSRF guard)
 **Plans**: 3 plans
-  - [ ] 05-00-PLAN.md — Wave 0: 0002_add_consumer_id migration + DAL scoping (D-11) + @geo/fetch validateUrlHost/createSafeRequester SSRF-POST (D-12) + @geo/api scaffold zod-v3+Scalar (D-14)
-  - [ ] 05-01-PLAN.md — Wave 1 submit slice: bearer auth (401/consumer_id) + POST /audit (validate, normalize, dedup skip-failed, callback SSRF→400, async insert) (API-01/04/05/08)
+  - [x] 05-00-PLAN.md — Wave 0: 0002_add_consumer_id migration + DAL scoping (D-11) + @geo/fetch validateUrlHost/createSafeRequester SSRF-POST (D-12) + @geo/api scaffold zod-v3+Scalar (D-14)
+  - [x] 05-01-PLAN.md — Wave 1 submit slice: bearer auth (401/consumer_id) + POST /audit (validate, normalize, dedup skip-failed, callback SSRF→400, async insert) (API-01/04/05/08)
   - [ ] 05-02-PLAN.md — Wave 2 read+docs+webhook: GET /audit/{id} 404-scoping + GET /audits paginated + GET /healthz 200/503 + /openapi.json+/docs+docs/api.md + worker webhook fire (API-02/03/06/07/08)
 **UI hint**: no
 
