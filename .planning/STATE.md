@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 3 Plan 02 complete (DAL + SKIP LOCKED claim, 48 tests green + 1 skipped)
-last_updated: "2026-06-03T01:28:16.808Z"
+status: executing
+stopped_at: Phase 5 Plan 00 complete (Wave 0 prereqs — consumer_id DAL, SSRF POST, @geo/api scaffold)
+last_updated: "2026-06-05T19:08:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 17
-  completed_plans: 17
-  percent: 57
+  total_plans: 20
+  completed_plans: 18
+  percent: 60
 ---
 
 # Project State: geo-api
@@ -26,11 +26,11 @@ progress:
 
 ## Current Position
 
-Phase: 3 (postgres-schema-durable-job-queue) — EXECUTING
-Plan: 2 of 3
+Phase: 05 (bun-hono-api-layer) — EXECUTING
+Plan: 1 of 3 COMPLETE (Wave 0 prereqs)
 **Phase:** 3 — Postgres Schema & Durable Job Queue — EXECUTING
 **Plan:** Plan 02 COMPLETE — typed DAL + SKIP LOCKED claim + lifecycle/queue/concurrency tests (DATA-01, DATA-02, WORK-01)
-**Status:** Phase 3 COMPLETE — all 3 plans done
+**Status:** Executing Phase 05
 **Branch:** phase-01-geo-core-deterministic-package
 
 ```
@@ -76,6 +76,7 @@ Progress: [█████████░] 94%
 | 03-00 @geo/db scaffold + getSql guard + PGlite harness | ~15 min | 3 | 11 |
 | 03-01 migration runner + 0001_create_audits schema | ~15 min | 2 | 5 |
 | 03-02 typed DAL + SKIP LOCKED claim + lease fencing + tests | ~20 min | 3 | 7 |
+| 05-00 Wave 0: consumer_id DAL + SSRF POST + @geo/api scaffold | ~25 min | 3 | 19 |
 
 ---
 
@@ -106,6 +107,10 @@ Progress: [█████████░] 94%
 - stacked encoding cap is 2; enforced synchronously in buildDecompressChain before streaming (02-03)
 - tsconfig.check.json created (rootDir='.') for tsc --noEmit including test helpers (02-03)
 - Flask CRM (`scripts/webapp/app.py`) untouched this milestone
+- 05-00: consumer dedup/history use `consumer_id = $consumer` equality (legacy null rows never match)
+- 05-00: @hono/zod-openapi@0.19.10 + @scalar/hono-api-reference@0.10.20 keep zod v3 (3.25.51); Scalar's nested zod v4 is isolated
+- 05-00: validateUrl exported from safe-fetcher and reused by safe-requester (SSRF POST), no validator duplication
+- 05-00: createApp({dal,fetcher}) DI factory — no module-level singleton DAL
 
 ### Architecture Pointers
 
