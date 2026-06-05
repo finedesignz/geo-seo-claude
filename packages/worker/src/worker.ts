@@ -11,6 +11,7 @@
  * - Injectable clock/sleep seam for deterministic fake-timer tests (D-16).
  */
 
+import { writeFileSync } from "node:fs";
 import type { WorkerOptions } from "./types.js";
 import { runAudit } from "./pipeline.js";
 import { createScorer } from "./scorer.js";
@@ -46,6 +47,10 @@ export async function runWorker(opts: WorkerOptions): Promise<void> {
 
   let shuttingDown = false;
 
+  // Liveness heartbeat (D-06): the worker exposes no HTTP port, so a stale
+  // heartbeat file is its health signal (see scripts/worker-healthcheck.sh).
+  const heartbeatFile = process.env["WORKER_HEARTBEAT_FILE"] ?? "/tmp/worker-heartbeat";
+
   // Signal handlers — registered here, removed in finally
   const handleStop = () => {
     shuttingDown = true;
@@ -65,6 +70,14 @@ export async function runWorker(opts: WorkerOptions): Promise<void> {
   try {
     // Poll loop
     while (!shuttingDown) {
+      // Refresh liveness heartbeat each iteration (stays fresh even at concurrency
+      // cap, since the loop still spins every pollIntervalMs). Non-fatal on IO error.
+      try {
+        writeFileSync(heartbeatFile, String(Date.now()));
+      } catch {
+        /* non-fatal — never crash the worker on heartbeat IO error */
+      }
+
       if (inFlight.size < concurrency) {
         let job;
         try {
