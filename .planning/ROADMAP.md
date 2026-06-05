@@ -132,7 +132,10 @@
   1. The cron container fires on schedule and posts re-audit requests for each configured URL via `POST /audit`, with results visible in audit history
   2. `hyperoptimizedwebsites` can call `@geo/core` functions (e.g. `checkRobots`, `detectRendering`) without making any HTTP call to the geo-api service
   3. `ottolax` (Python) can `POST /audit` with a bearer token, poll `GET /audit/{id}`, and receive a structured score + findings response
-**Plans**: TBD
+**Plans**: 3 plans (2 waves)
+  - [ ] 07-01-PLAN.md — packages/cron: @geo/cron one-shot caller (env fail-fast, runCron loop, in-process app+PGlite tests) — DEPLOY-02 (Wave 1)
+  - [ ] 07-02-PLAN.md — cron run target: Dockerfile manifest + .env.example + Coolify scheduled-task runbook (>1h cadence) — DEPLOY-02/03 (Wave 2)
+  - [ ] 07-03-PLAN.md — consumer artifacts: @geo/core inline example+offline test, ottolax stdlib Python client, docs/consumers.md — CONS-01/CONS-02 (Wave 2)
 
 ---
 
