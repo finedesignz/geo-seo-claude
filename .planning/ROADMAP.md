@@ -13,7 +13,7 @@
 - [x] **Phase 2: SSRF & Fetch Hardening** - Harden URL fetcher to block SSRF vectors, DNS-rebinding, redirect chains, size caps — prerequisite for all URL-accepting features
 - [x] **Phase 3: Postgres Schema & Durable Job Queue** - Coolify Postgres schema with migration management, job state machine, and SKIP LOCKED worker queue
 - [x] **Phase 4: Worker Pipeline** - Background worker claiming jobs, running @geo/core deterministic checks + structured Anthropic SDK scoring call, persisting results (completed 2026-06-03)
-- [ ] **Phase 5: Bun+Hono API Layer** - POST/GET /audit endpoints, auth, dedup, webhook, history, /healthz, /openapi.json + /docs
+- [x] **Phase 5: Bun+Hono API Layer** - POST/GET /audit endpoints, auth, dedup, webhook, history, /healthz, /openapi.json + /docs
 - [ ] **Phase 6: Containerize & Coolify Deploy** - Container image for API + worker, Coolify service setup, env-sourced secrets, deploy verification
 - [ ] **Phase 7: Cron + Consumer Wiring** - Scheduled re-audit cron container, HOW inline @geo/core integration, ottolax HTTP consumer integration
 
@@ -105,7 +105,7 @@
 **Plans**: 3 plans
   - [x] 05-00-PLAN.md — Wave 0: 0002_add_consumer_id migration + DAL scoping (D-11) + @geo/fetch validateUrlHost/createSafeRequester SSRF-POST (D-12) + @geo/api scaffold zod-v3+Scalar (D-14)
   - [x] 05-01-PLAN.md — Wave 1 submit slice: bearer auth (401/consumer_id) + POST /audit (validate, normalize, dedup skip-failed, callback SSRF→400, async insert) (API-01/04/05/08)
-  - [ ] 05-02-PLAN.md — Wave 2 read+docs+webhook: GET /audit/{id} 404-scoping + GET /audits paginated + GET /healthz 200/503 + /openapi.json+/docs+docs/api.md + worker webhook fire (API-02/03/06/07/08)
+  - [x] 05-02-PLAN.md — Wave 2 read+docs+webhook: GET /audit/{id} 404-scoping + GET /audits paginated + GET /healthz 200/503 + /openapi.json+/docs+docs/api.md + worker webhook fire (API-02/03/06/07/08)
 **UI hint**: no
 
 ### Phase 6: Containerize & Coolify Deploy
