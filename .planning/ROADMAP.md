@@ -15,7 +15,7 @@
 - [x] **Phase 4: Worker Pipeline** - Background worker claiming jobs, running @geo/core deterministic checks + structured Anthropic SDK scoring call, persisting results (completed 2026-06-03)
 - [x] **Phase 5: Bun+Hono API Layer** - POST/GET /audit endpoints, auth, dedup, webhook, history, /healthz, /openapi.json + /docs
 - [x] **Phase 6: Containerize & Coolify Deploy** - Container image for API + worker, Coolify service setup, env-sourced secrets, deploy verification (artifacts complete; live deploy DEFERRED-LIVE behind operator Coolify gate)
-- [ ] **Phase 7: Cron + Consumer Wiring** - Scheduled re-audit cron container, HOW inline @geo/core integration, ottolax HTTP consumer integration
+- [x] **Phase 7: Cron + Consumer Wiring** - Scheduled re-audit cron container, HOW inline @geo/core integration, ottolax HTTP consumer integration (completed 2026-06-05)
 
 ---
 
@@ -135,7 +135,7 @@
 **Plans**: 3 plans (2 waves)
   - [x] 07-01-PLAN.md — packages/cron: @geo/cron one-shot caller (env fail-fast, runCron loop, in-process app+PGlite tests) — DEPLOY-02 (Wave 1)
   - [x] 07-02-PLAN.md — cron run target: Dockerfile manifest + .env.example + Coolify scheduled-task runbook (>1h cadence) — DEPLOY-02/03 (Wave 2)
-  - [ ] 07-03-PLAN.md — consumer artifacts: @geo/core inline example+offline test, ottolax stdlib Python client, docs/consumers.md — CONS-01/CONS-02 (Wave 2)
+  - [x] 07-03-PLAN.md — consumer artifacts: @geo/core inline example+offline test, ottolax stdlib Python client, docs/consumers.md — CONS-01/CONS-02 (Wave 2)
 
 ---
 
@@ -149,7 +149,7 @@
 | 4. Worker Pipeline | 3/3 | Complete   | 2026-06-03 |
 | 5. Bun+Hono API Layer | 0/0 | Not started | - |
 | 6. Containerize & Coolify Deploy | 3/3 | Artifacts complete; live deploy DEFERRED (human gate) | 2026-06-04 |
-| 7. Cron + Consumer Wiring | 0/0 | Not started | - |
+| 7. Cron + Consumer Wiring | 3/3 | Complete   | 2026-06-05 |
 
 ---
 *Roadmap created: 2026-06-01*
