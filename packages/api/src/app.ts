@@ -13,21 +13,38 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import { Scalar } from "@scalar/hono-api-reference";
 import type { AuditDal } from "@geo/db";
 import type { createSafeFetcher } from "@geo/fetch";
+import { bearerAuth } from "./middleware/auth.js";
+import { registerAuditPost } from "./routes/audit-post.js";
+
+/** Injectable DNS resolver: hostname → all A+AAAA addresses. */
+export type CallbackResolver = (hostname: string) => Promise<string[]>;
 
 export interface AppDeps {
   dal: AuditDal;
   fetcher: ReturnType<typeof createSafeFetcher>;
+  /** token→consumer_id map (built from GEO_API_KEYS in main.ts; injected in tests). */
+  apiKeys: Map<string, string>;
+  /**
+   * Optional resolver injected into the submit-time callback_url SSRF check so
+   * tests can simulate private/loopback DNS without real network. Defaults to
+   * the real resolver inside validateUrlHost when omitted.
+   */
+  callbackResolver?: CallbackResolver;
 }
+
+/** Hono context variable typing shared across the app. */
+export type AppVariables = { consumer_id: string };
 
 /**
  * Build the Hono app. Routes added in later waves; Wave 0 registers a liveness
  * probe (OpenAPI-first) so the spec has at least one path.
  */
-export function createApp(deps: AppDeps): OpenAPIHono {
-  // Hold the deps so later waves wire handlers; referenced to avoid unused-var.
-  void deps;
+export function createApp(deps: AppDeps): OpenAPIHono<{ Variables: AppVariables }> {
+  const app = new OpenAPIHono<{ Variables: AppVariables }>();
 
-  const app = new OpenAPIHono();
+  // Bearer auth on every route; EXEMPT set (healthz/openapi/docs) is handled
+  // inside the middleware so the docs surface stays public (rule 21).
+  app.use("*", bearerAuth(deps.apiKeys));
 
   const healthRoute = createRoute({
     method: "get",
@@ -47,6 +64,9 @@ export function createApp(deps: AppDeps): OpenAPIHono {
   });
 
   app.openapi(healthRoute, (c) => c.json({ status: "ok" as const }));
+
+  // POST /audit — submit slice (Wave 1).
+  registerAuditPost(app, deps);
 
   // OpenAPI 3.1 spec — rule 21 required path.
   app.doc31("/openapi.json", {

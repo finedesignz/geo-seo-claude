@@ -1,4 +1,6 @@
-// @geo/api — public surface (Wave 0 scaffold).
+// @geo/api — public surface (Wave 1).
 
 export { createApp } from "./app.js";
-export type { AppDeps } from "./app.js";
+export type { AppDeps, AppVariables, CallbackResolver } from "./app.js";
+export { parseApiKeys, bearerAuth, EXEMPT } from "./middleware/auth.js";
+export { registerAuditPost, DEDUP_TTL_MS } from "./routes/audit-post.js";

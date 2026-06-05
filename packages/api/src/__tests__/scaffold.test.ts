@@ -22,7 +22,12 @@ describe("@geo/api scaffold", () => {
 
   it("/openapi.json returns a parseable OpenAPI 3.1 document", async () => {
     test = await makeTestDal();
-    const app = createApp({ dal: test.dal, fetcher: createSafeFetcher({ resolver: mockResolver }) });
+    const app = createApp({
+      dal: test.dal,
+      fetcher: createSafeFetcher({ resolver: mockResolver }),
+      apiKeys: new Map([["sk-test", "test-consumer"]]),
+      callbackResolver: mockResolver,
+    });
 
     const res = await app.request("/openapi.json");
     expect(res.status).toBe(200);
@@ -35,7 +40,12 @@ describe("@geo/api scaffold", () => {
 
   it("/docs returns 200", async () => {
     test = await makeTestDal();
-    const app = createApp({ dal: test.dal, fetcher: createSafeFetcher({ resolver: mockResolver }) });
+    const app = createApp({
+      dal: test.dal,
+      fetcher: createSafeFetcher({ resolver: mockResolver }),
+      apiKeys: new Map([["sk-test", "test-consumer"]]),
+      callbackResolver: mockResolver,
+    });
 
     const res = await app.request("/docs");
     expect(res.status).toBe(200);

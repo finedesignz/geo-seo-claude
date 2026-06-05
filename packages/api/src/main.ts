@@ -8,12 +8,15 @@
 import { getDefaultDal } from "@geo/db";
 import { createSafeFetcher } from "@geo/fetch";
 import { createApp } from "./app.js";
+import { parseApiKeys } from "./middleware/auth.js";
 
 let _app: ReturnType<typeof createApp> | undefined;
 
 function getApp(): ReturnType<typeof createApp> {
   if (_app) return _app;
-  _app = createApp({ dal: getDefaultDal(), fetcher: createSafeFetcher() });
+  // Fail-fast at startup: GEO_API_KEYS must be present and parse to >=1 pair.
+  const apiKeys = parseApiKeys(process.env.GEO_API_KEYS);
+  _app = createApp({ dal: getDefaultDal(), fetcher: createSafeFetcher(), apiKeys });
   return _app;
 }
 
