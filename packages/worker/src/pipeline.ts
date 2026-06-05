@@ -20,6 +20,8 @@ import {
 import type { Fetcher } from "@geo/core";
 import type { AuditJob, AuditDal, FindingsShape } from "@geo/db";
 import { ScoringError } from "./scorer.js";
+import { deliverWebhook } from "./webhook.js";
+import type { WebhookRequester } from "./webhook.js";
 
 // ---------------------------------------------------------------------------
 // Deps shape for runAudit
@@ -36,6 +38,12 @@ export interface PipelineDeps {
   fetcher: Fetcher;
   leaseTtlSecs: number;
   maxAttempts: number;
+  /**
+   * Optional injectable SSRF-safe POST requester for webhook delivery (tests).
+   * When omitted, deliverWebhook builds a hardened createSafeRequester. Delivery
+   * is always non-fatal — it never affects job state (API-08, D-08/D-12).
+   */
+  webhookRequester?: WebhookRequester;
   /** Injectable clock for tests (defaults to real setInterval/clearInterval). */
   clock?: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,6 +65,25 @@ export async function runAudit(job: AuditJob, deps: PipelineDeps): Promise<void>
   const clearInt: (h: any) => void = deps.clock?.clearInterval ?? clearInterval;
 
   const ac = new AbortController();
+
+  /**
+   * Fire the completion/failure webhook — NON-FATAL (API-08, D-08/D-12).
+   * Only fires when the job carries a callback_url. deliverWebhook re-validates
+   * the host at fire time and never throws; we additionally guard with .catch
+   * so a delivery error can never reject the pipeline or affect job state.
+   */
+  const tryDeliverWebhook = (
+    status: "done" | "failed",
+    score: number | null,
+    findings: unknown,
+  ): void => {
+    if (!job.callbackUrl) return;
+    void deliverWebhook(
+      job.callbackUrl,
+      { job_id: job.id, status, score, findings },
+      { requester: deps.webhookRequester },
+    ).catch((err) => console.warn(`[pipeline] webhook delivery failed for job ${job.id}:`, err));
+  };
 
   // Heartbeat: renew the lease every TTL/2 ms. False → abort (lease lost).
   const heartbeatMs = Math.floor((leaseTtlSecs * 1000) / 2);
@@ -81,6 +108,7 @@ export async function runAudit(job: AuditJob, deps: PipelineDeps): Promise<void>
       if (ac.signal.aborted) return;
       const ok = await dal.failJob(job.id, job.leaseToken!, fetchResult.error);
       if (!ok) console.warn(`[pipeline] failJob lease-loss for job ${job.id}`);
+      else tryDeliverWebhook("failed", null, null);
       return;
     }
 
@@ -133,6 +161,7 @@ export async function runAudit(job: AuditJob, deps: PipelineDeps): Promise<void>
         } else {
           const ok = await dal.failJob(job.id, job.leaseToken!, err.code);
           if (!ok) console.warn(`[pipeline] failJob lease-loss for job ${job.id}`);
+          else tryDeliverWebhook("failed", null, null);
         }
         return;
       }
@@ -142,6 +171,7 @@ export async function runAudit(job: AuditJob, deps: PipelineDeps): Promise<void>
       const code = (err as { code?: string }).code ?? "PIPELINE_ERROR";
       const ok = await dal.failJob(job.id, job.leaseToken!, code);
       if (!ok) console.warn(`[pipeline] failJob lease-loss for job ${job.id}`);
+      else tryDeliverWebhook("failed", null, null);
       return;
     }
 
@@ -157,6 +187,7 @@ export async function runAudit(job: AuditJob, deps: PipelineDeps): Promise<void>
 
     const ok = await dal.completeJob(job.id, job.leaseToken!, scored.score, merged);
     if (!ok) console.warn(`[pipeline] completeJob lease-loss for job ${job.id}`);
+    else tryDeliverWebhook("done", scored.score, merged);
   } finally {
     clearInt(heartbeat);
   }

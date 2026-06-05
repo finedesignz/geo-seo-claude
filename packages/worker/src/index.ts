@@ -19,3 +19,5 @@ export type { GeoScoreOutput, ScorerOptions, ScoreResult } from "./scorer.js";
 export { runWorker } from "./worker.js";
 export { runAudit } from "./pipeline.js";
 export type { PipelineDeps } from "./pipeline.js";
+export { deliverWebhook } from "./webhook.js";
+export type { WebhookRequester, WebhookPayload, DeliverWebhookDeps } from "./webhook.js";
