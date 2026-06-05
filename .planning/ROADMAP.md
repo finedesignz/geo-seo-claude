@@ -14,7 +14,7 @@
 - [x] **Phase 3: Postgres Schema & Durable Job Queue** - Coolify Postgres schema with migration management, job state machine, and SKIP LOCKED worker queue
 - [x] **Phase 4: Worker Pipeline** - Background worker claiming jobs, running @geo/core deterministic checks + structured Anthropic SDK scoring call, persisting results (completed 2026-06-03)
 - [x] **Phase 5: Bun+Hono API Layer** - POST/GET /audit endpoints, auth, dedup, webhook, history, /healthz, /openapi.json + /docs
-- [ ] **Phase 6: Containerize & Coolify Deploy** - Container image for API + worker, Coolify service setup, env-sourced secrets, deploy verification
+- [x] **Phase 6: Containerize & Coolify Deploy** - Container image for API + worker, Coolify service setup, env-sourced secrets, deploy verification (artifacts complete; live deploy DEFERRED-LIVE behind operator Coolify gate)
 - [ ] **Phase 7: Cron + Consumer Wiring** - Scheduled re-audit cron container, HOW inline @geo/core integration, ottolax HTTP consumer integration
 
 ---
