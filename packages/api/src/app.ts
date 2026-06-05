@@ -9,12 +9,15 @@
  * DAL — there is NO module-level singleton DAL.
  */
 
-import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
+import { OpenAPIHono } from "@hono/zod-openapi";
 import { Scalar } from "@scalar/hono-api-reference";
 import type { AuditDal } from "@geo/db";
 import type { createSafeFetcher } from "@geo/fetch";
 import { bearerAuth } from "./middleware/auth.js";
 import { registerAuditPost } from "./routes/audit-post.js";
+import { registerAuditGet } from "./routes/audit-get.js";
+import { registerAuditsList } from "./routes/audits-list.js";
+import { registerHealthz } from "./routes/healthz.js";
 
 /** Injectable DNS resolver: hostname → all A+AAAA addresses. */
 export type CallbackResolver = (hostname: string) => Promise<string[]>;
@@ -42,31 +45,29 @@ export type AppVariables = { consumer_id: string };
 export function createApp(deps: AppDeps): OpenAPIHono<{ Variables: AppVariables }> {
   const app = new OpenAPIHono<{ Variables: AppVariables }>();
 
+  // Bearer security scheme registered on the OpenAPI registry so the generated
+  // spec carries components.securitySchemes.BearerAuth (API-07). Protected
+  // routes reference security:[{BearerAuth:[]}].
+  app.openAPIRegistry.registerComponent("securitySchemes", "BearerAuth", {
+    type: "http",
+    scheme: "bearer",
+  });
+
   // Bearer auth on every route; EXEMPT set (healthz/openapi/docs) is handled
   // inside the middleware so the docs surface stays public (rule 21).
   app.use("*", bearerAuth(deps.apiKeys));
 
-  const healthRoute = createRoute({
-    method: "get",
-    path: "/healthz",
-    tags: ["system"],
-    summary: "Liveness probe",
-    responses: {
-      200: {
-        content: {
-          "application/json": {
-            schema: z.object({ status: z.literal("ok") }),
-          },
-        },
-        description: "Service is alive",
-      },
-    },
-  });
-
-  app.openapi(healthRoute, (c) => c.json({ status: "ok" as const }));
+  // GET /healthz — deep DB check (public, auth-exempt).
+  registerHealthz(app, deps);
 
   // POST /audit — submit slice (Wave 1).
   registerAuditPost(app, deps);
+
+  // GET /audit/{job_id} — poll (Wave 2).
+  registerAuditGet(app, deps);
+
+  // GET /audits — paginated history (Wave 2).
+  registerAuditsList(app, deps);
 
   // OpenAPI 3.1 spec — rule 21 required path.
   app.doc31("/openapi.json", {

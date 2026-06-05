@@ -134,6 +134,12 @@ export interface AuditDal {
   listJobs(pagination: PaginationInput): Promise<AuditJob[]>;
   findRecentByUrlHash(urlHash: string, ttlMs: number, consumerId: string): Promise<AuditJob | null>;
   reclaimExpired(maxAttempts?: number): Promise<number>;
+  /**
+   * Deep liveness probe (API-06 / D-07): runs `SELECT 1` against the DB.
+   * Resolves on success; throws if the connection is unreachable/closed so a
+   * caller (GET /healthz) can return 503. Parameterless, no side effects.
+   */
+  ping(): Promise<void>;
 }
 
 export function createAuditDal(executor: SqlExecutor): AuditDal {
@@ -351,6 +357,13 @@ export function createAuditDal(executor: SqlExecutor): AuditDal {
       );
       if (rows.length === 0) return null;
       return rowToJob(rows[0]!);
+    },
+
+    // -------------------------------------------------------------------------
+    // ping — deep liveness probe (API-06 / D-07). Throws if DB unreachable.
+    // -------------------------------------------------------------------------
+    async ping(): Promise<void> {
+      await executor.query<{ ["?column?"]: number }>(`SELECT 1`, []);
     },
 
     // -------------------------------------------------------------------------
