@@ -2,101 +2,101 @@
 
 ## What This Is
 
-`geo-api` is a standalone, containerized **FastAPI service** that wraps the existing `geo-seo-claude` audit toolkit (the `scripts/*.py` scrapers + the markdown-driven GEO audit) and exposes it as an HTTP API. It lets other applications — primarily `../hyperoptimizedwebsites` and `../ottolax` — request a Generative Engine Optimization (GEO) audit of any website URL, get back a 0–100 GEO Score with findings, and re-run audits on a schedule. It turns an interactive, human-driven Claude Code skill into an automated, callable service.
+`geo-api` is a standalone, containerized **Bun + Hono HTTP service** (all-TypeScript) that automates the GEO (Generative Engine Optimization) audit previously delivered as an interactive `geo-seo-claude` Claude Code skill. Consumer apps — primarily `../hyperoptimizedwebsites` (TS, imports `@geo/core` inline) and `../ottolax` (Python, calls the HTTP API) — `POST` a website URL and reliably get back a 0–100 GEO Score with findings, fully automated. The deterministic ~80% of an audit lives in a zero-dependency shared TS package (`@geo/core`); the irreducible judgment is a single structured Anthropic SDK scoring call. Audits run as durable background jobs over a Postgres SKIP-LOCKED queue, with a cron container for scheduled re-audits.
 
 ## Core Value
 
-**Any consumer app can POST a URL and reliably get back a 0–100 GEO Score with findings — fully automated, no human in the loop.** The deterministic ~80% of an audit (crawl/robots, llms.txt, schema templates, SSR/CSR detection, citability heuristics) is plain code in a shared package; only the irreducible judgment is a single structured LLM call.
+**Any consumer app can POST a URL and reliably get back a 0–100 GEO Score with findings — fully automated, no human in the loop.** The deterministic ~80% of an audit (crawl/robots, llms.txt, schema templates, SSR/CSR detection, citability heuristics) is plain code in a shared package; only the irreducible judgment is a single structured LLM call. (Validated by v1.0 — still the right priority.)
+
+## Current State
+
+**v1.0 SHIPPED 2026-06-05 — code-complete + independently verified in-process.** 7 phases, 26 plans, 372 tests passing across core/fetch/db/api/worker/cron + examples. All 35 v1 requirements satisfied (audit `.planning/milestones/v1.0-MILESTONE-AUDIT.md`, status: passed, 0 real gaps).
+
+**Remaining operator / cross-repo actions (documented, NOT v1.0 gaps):**
+- **DEFERRED-LIVE — live production deploy** behind an operator Coolify gate: provision the Coolify app + Postgres + secrets, then run `deploy-verify.sh` (healthz + real `/audit` round-trip). See `.planning/phases/06-containerize-coolify-deploy/DEPLOY-RECORD.md` + `docs/deploy.md`. Branch is unpushed (third-party origin needs operator authorization). Discharges DATA-01/02, WORK-01, DEPLOY-01/02/04 live.
+- **DEFERRED cross-repo (rule 20) — consumer wirings**: `hyperoptimizedwebsites` `@geo/core` inline dependency (CONS-01) and `ottolax` Python client integration (CONS-02). Consumer artifacts/contracts shipped in-repo (`examples/how-inline-usage.ts`, `examples/ottolax-client.py`, `docs/consumers.md`); the actual wiring happens in those repos.
 
 ## Requirements
 
 ### Validated
 
-<!-- Inferred from existing code (.planning/codebase/) — already working and relied upon. -->
+<!-- Pre-existing (inferred from .planning/codebase/) -->
+- ✓ Public-web scraping (YouTube, Reddit, LinkedIn, G2, Wikipedia/Wikidata) — pre-existing `scripts/*.py`
+- ✓ LLM-as-orchestrator interactive GEO audit (0–100 score) — pre-existing skill (now superseded by the automated service for service consumers)
+- ✓ Screenshot capture + PDF report generation — pre-existing
+- ✓ Local Flask CRM dashboard (port 5050) — pre-existing, kept as-is
 
-- ✓ Public-web scraping across YouTube, Reddit, LinkedIn, G2, Wikipedia/Wikidata, etc. (`scripts/brand_scanner.py`, `scripts/*.py`) — existing
-- ✓ Page fetch + SSR/HTML parsing with requests + BeautifulSoup4/lxml (`scripts/fetch_page.py`) — existing
-- ✓ LLM-as-orchestrator GEO audit producing a 0–100 GEO Score, fanned out across 5 parallel subagents (`geo/SKILL.md`, `skills/geo-*/SKILL.md`, `agents/*.md`) — existing
-- ✓ Screenshot capture (Playwright/Pillow) and PDF report generation (pandoc + headless Chrome) — existing
-- ✓ Local Flask CRM dashboard for prospect tracking on port 5050, JSON-file backed under `~/.geo-prospects/` (`scripts/webapp/app.py`) — existing
-- ✓ Stateless CLI tools emitting JSON to stdout — existing
+<!-- Shipped in v1.0 -->
+- ✓ Zero-dep TS `@geo/core` (checkRobots, generateLlmsTxt, getSchemaTemplates, computeCitabilityScore, detectRendering), dual ESM/CJS — v1.0
+- ✓ SSRF/fetch hardening (`@geo/fetch`): resolve-then-pin, redirect re-validation, size cap + decompression-bomb defense, structured errors — v1.0
+- ✓ Structured Anthropic SDK scoring (forced tool-use, JSON schema, prompt caching, clean failure) — v1.0
+- ✓ Coolify Postgres durable queue (`@geo/db`): SKIP LOCKED claim, lease fencing, advisory-locked migration runner, env-only DATABASE_URL — v1.0
+- ✓ Worker pipeline (`@geo/worker`): @geo/core checks → scoring → persist, bounded concurrency, reclaim sweep, graceful drain — v1.0
+- ✓ Bun+Hono REST API (`@geo/api`): async submit/poll, paginated history, bearer auth, consumer-scoped dedup, webhook w/ fire-time SSRF re-check, deep `/healthz`, `/openapi.json` + Scalar `/docs` — v1.0
+- ✓ Single multi-stage container image, role-by-command (api/worker/cron), secrets from env, deploy-verify smoke script + Coolify runbook — v1.0 (in-process; live deploy DEFERRED-LIVE)
+- ✓ Cron re-audit container (`@geo/cron`) + consumer artifacts (HOW inline example, ottolax Python client) — v1.0 (live cross-repo wiring DEFERRED)
 
 ### Active
 
-<!-- New scope for the geo-api milestone. Hypotheses until shipped + validated. -->
-
-- [ ] Shared **`@geo/core`** package holding the deterministic ~80% as zero-dep plain functions: crawl/robots check, llms.txt generation, schema.org templates, citability heuristic, SSR/CSR detection. Imported by BOTH the service and `../hyperoptimizedwebsites` (no per-audit LLM call for deterministic checks; HOW can run cheap checks inline without round-tripping the service)
-- [ ] Harden URL fetching against SSRF (block private/link-local/cloud-metadata IPs, validate redirects, DNS-rebind safe) and add response-size/decompression caps before any URL is exposed to the network
-- [ ] Service exposing `POST /audit {url}` → `{job_id}` (async job model)
-- [ ] `GET /audit/{job_id}` → status + 0–100 GEO Score + findings
-- [ ] Scoring = a single **structured Anthropic SDK call** with a JSON output schema + prompt caching (NOT `claude -p`, NOT an agent host). Deterministic findings feed the prompt; the LLM only renders the irreducible judgment into the score
-- [ ] Persist audit jobs + history in **Coolify Postgres** (replacing racy `~/.geo-prospects/*.json` writes)
-- [ ] Expose `/openapi.json` + `/docs` (scalar-fastapi) per docs standard (global rule 21)
-- [ ] Containerize and deploy as a standalone service on **Coolify**
-- [ ] Scheduled re-audits: a cron container re-audits a configured list of sites
-- [ ] Event-driven on-demand audits triggered by `../hyperoptimizedwebsites` and `../ottolax` over HTTP
-- [ ] Auth on the API surface (consumer apps authenticate; not unauthenticated public)
+<!-- v2 candidates — deferred from v1.0 by design. -->
+- [ ] **Operator**: live Coolify deploy + run `deploy-verify.sh` (discharges DEFERRED-LIVE deploy items)
+- [ ] **Cross-repo**: wire `hyperoptimizedwebsites` to `@geo/core` (CONS-01) and `ottolax` to the Python client (CONS-02)
+- [ ] **REP-01**: PDF report endpoint for a completed audit
+- [ ] **REP-02**: Score-over-time history/trend per site
+- [ ] **OPS-01**: Rate limiting per consumer/API key
+- [ ] **OPS-02**: Idempotency keys on `POST /audit`
+- [ ] (candidate) LISTEN/NOTIFY webhook dispatcher over current poll/fire
 
 ### Out of Scope
 
-- Rewriting the existing scrapers — reuse as-is; only `fetch_page.py` gets security hardening — *avoid churn / preserve working behavior*
-- Migrating or replacing the Flask CRM (`scripts/webapp/app.py`) — *keep as-is for now; may fold into the service in a later milestone*
-- Headless `claude -p`-in-container / agent-host scoring — *killed: the 0–100 score is a structured SDK call, not an agent run. Only revisit if a real driver emerges for multi-step tool-use DURING an audit (driver #3); for a score it does not exist*
-- Routing deterministic checks (robots, llms.txt, schema, SSR/CSR) through LLM calls — *they are plain functions in `@geo/core`; sending them to Claude is waste and the exact failure mode to prevent*
-- A new end-user-facing UI for geo-api — *it's a service; consumer apps own their UIs*
-- Multi-tenant billing / Titanium licensing wiring — *internal service for now; revisit if it becomes user-facing*
+- Rewriting the existing scrapers — ported to `@geo/core` (TS), originals kept
+- Migrating/replacing the Flask CRM (`scripts/webapp/app.py`) — kept as-is
+- `claude -p` / agent-host scoring — killed; score is a structured SDK call
+- Routing deterministic checks through LLM calls — they are plain `@geo/core` functions
+- A new end-user-facing UI for geo-api — consumer apps own their UIs
+- Multi-tenant billing / Titanium licensing — internal service for now
+- Synchronous `/audit`, WebSocket streaming, GraphQL/gRPC — async REST + webhook suffice
 
 ## Context
 
-- **Brownfield.** Full codebase map exists in `.planning/codebase/` (STACK, ARCHITECTURE, STRUCTURE, CONVENTIONS, TESTING, INTEGRATIONS, CONCERNS). Mapped at commit `9eec32f`, 2026-06-01.
-- The repo is a **Claude Code skill package**, not a conventional app: control flow lives in markdown prompts backed by a stateless Python tool layer (WAT-style: LLM orchestrator + deterministic CLI tools).
-- The **scoring engine currently requires a Claude session** — the 0–100 synthesis is reasoning over markdown, not pure Python. The headless `claude -p` approach is the key unlock for automation and is the project's main technical risk.
-- `CONCERNS.md` flags: SSRF + no response-size caps in `fetch_page.py`, unauthenticated Flask CRM with racy read-modify-write JSON writes, broad `except`/silent `pass`, brittle third-party scraping, thin test coverage (one SSR-only pytest module), no CI.
-- Stack rules: Postgres on Coolify (global rule 17), no Supabase (rule 18), FastAPI gets `/openapi.json` + scalar `/docs` natively (rule 21).
+- Shipped v1.0 as an **all-TypeScript Bun workspace** (~125 tracked files under `packages/`): `@geo/core`, `@geo/fetch`, `@geo/db`, `@geo/worker`, `@geo/api`, `@geo/cron`. 372 tests (vitest; PGlite for DB, in-process app harness for API/cron).
+- Tech stack: Bun + Hono, `@hono/zod-openapi` + `@scalar/hono-api-reference`, `@anthropic-ai/sdk`, postgres.js, undici + ipaddr.js, tsup dual ESM/CJS, single multi-stage Dockerfile (role-by-command).
+- The original repo is a Claude Code skill package (markdown prompts + stateless Python tools); v1.0 added the automated TS service alongside it without disturbing the skill or the Flask CRM.
+- CONCERNS.md items resolved in v1.0: SSRF + size caps (now `@geo/fetch`), racy JSON writes (now Postgres). Thin test coverage replaced by 372 tests; CI/live deploy remain operator-gated.
 
 ## Constraints
 
-- **Tech stack**: **All-TS** (decided). Service = **Bun + Hono** per global rule 21 (`@hono/zod-openapi` + `@scalar/hono-api-reference` for `/openapi.json` + `/docs`; bootstrap from `_templates/bun-hono-app/`). Scoring via the TS `@anthropic-ai/sdk`. The existing Python `scripts/*.py` scrapers are **ported to TS** inside `@geo/core` (not reused in-process).
-- **Shared core**: `@geo/core` = zero-dependency **TS** package of deterministic functions, imported inline by HOW (lives in/next to HOW's `packages/` monorepo) and by the Bun+Hono service; **ottolax (Python) reaches the same logic via the service's HTTP API.**
-- **Database**: Postgres on Coolify (`DATABASE_URL` in Coolify env, never in repo). Not Supabase, not SQLite for prod.
-- **Scoring**: one structured Anthropic SDK call (JSON output schema + prompt caching) — API key in Coolify env. NOT `claude -p`, NOT an agent host.
-- **Deployment**: standalone container on Coolify (`coolify.titaniumlabs.us`).
-- **Security**: `/audit` accepts arbitrary URLs → SSRF + size-cap hardening is a prerequisite, not optional. API surface must be authenticated.
-- **Docs**: must ship `/openapi.json` + `/docs`, plus `docs/` + `README.md` + `CLAUDE.md` (global rule 21).
-- **Reuse**: existing scrapers imported, not rewritten.
+- **Tech stack**: All-TS. Service = Bun + Hono (rule 21 docs). Scoring via TS `@anthropic-ai/sdk`. Python scrapers ported to TS in `@geo/core`.
+- **Shared core**: `@geo/core` zero-dep, imported inline by HOW and the service; ottolax (Python) reaches the same logic via HTTP.
+- **Database**: Postgres on Coolify (`DATABASE_URL` in Coolify env, never in repo).
+- **Scoring**: one structured Anthropic SDK call (JSON schema + prompt caching); API key in Coolify env.
+- **Deployment**: standalone container on Coolify (`coolify.titaniumlabs.us`). Origin is third-party — branch/tag push needs operator authorization.
+- **Security**: `/audit` accepts arbitrary URLs → SSRF + size-cap hardening is a prerequisite; API surface authenticated.
+- **Docs**: ships `/openapi.json` + `/docs`, plus `docs/` + `README.md` + `CLAUDE.md` (rule 21).
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| FastAPI over the existing Flask | Native OpenAPI/`/docs`, async for long audits, Pydantic-typed `/audit` contract for consumer codegen | — Pending |
-| Standalone Coolify service (not embedded library) | One GEO service, many consumers; isolates scraping risk from product apps; single place to maintain | — Pending |
-| Async job model (`POST /audit`→job_id, `GET /audit/{id}`) | Audits take tens of seconds to minutes; can't block the request | — Pending |
-| Scoring = structured Anthropic SDK call (JSON schema + prompt caching) | Removes the riskiest/most-expensive phase (claude -p container spike); a score needs one judgment call, not an agent host; cheap + deterministic-shaped output | — Pending |
-| Deterministic 80% in shared `@geo/core` package | Stops "we built a service" from turning a robots.txt check into a per-audit Claude call; lets HOW run cheap checks inline without round-tripping; one source of truth for the logic | — Pending |
-| Two real consumers (HOW + ottolax) justify the network boundary now | ≥2 committed consumers = the service earns its keep today; folding into HOW would force a painful double-paid extraction when ottolax needs it | ✓ Good |
-| All-TS: Bun+Hono service + TS `@geo/core`, port Python scrapers to TS | HOW (TS) imports `@geo/core` inline; the service imports the SAME code; one source of truth, zero cross-language duplication; ottolax (Python) consumes via HTTP. Cost accepted: porting scrapers to TS | ✓ Good |
-
-> **Research note:** `.planning/research/STACK.md` was produced under the earlier Python/FastAPI assumption (SAQ, psycopg3, claude -p). Its **stack-layer specifics are superseded** by the All-TS decision and the structured-SDK scoring decision above. The FEATURES, ARCHITECTURE, and PITFALLS research remain valid (language-agnostic: SSRF, async job state machine, SKIP LOCKED queue, Coolify topology, dedup/caching, healthcheck depth).
-| Coolify Postgres replaces `~/.geo-prospects/*.json` | JSON files are racy under concurrent writes (CONCERNS.md); need durable, concurrent-safe storage | — Pending |
-| Keep Flask CRM unchanged this milestone | Out of scope; avoid scope creep | — Pending |
+| All-TS: Bun+Hono service + TS `@geo/core`, port Python scrapers to TS | One source of truth; HOW imports inline, service imports same code; ottolax via HTTP | ✓ Good |
+| Scoring = single structured Anthropic SDK call (forced tool-use, JSON schema, prompt caching) | A score needs one judgment call, not an agent host; cheap, deterministic-shaped, cacheable | ✓ Good |
+| Deterministic ~80% in zero-dep `@geo/core` | Stops a robots.txt check from becoming a per-audit Claude call; HOW runs cheap checks inline | ✓ Good |
+| Standalone Coolify service (not embedded library) | Two committed consumers (HOW + ottolax) justify the network boundary now | ✓ Good |
+| Postgres SKIP LOCKED durable queue + advisory-locked migrations (no Redis/Celery) | Durable, concurrent-safe, survives redeploy; one less moving part | ✓ Good |
+| SSRF resolve-then-pin at every URL ingress + webhook re-validated at fire-time | DNS-rebinding-safe; the callback is as dangerous as the audit URL | ✓ Good |
+| Single multi-stage image, role-by-command (api/worker/cron) | One artifact, three run targets; no duplicated build | ✓ Good |
+| Async job model (`POST /audit`→job_id, `GET /audit/{id}`) | Audits take tens of seconds–minutes; can't block the request | ✓ Good |
+| Live deploy gated to operator (Coolify provision + secrets + third-party origin push) | No fabricated UUIDs/secrets/transcripts; human gate per global rule 9 | ✓ Good (deferred-live) |
+| Consumer wiring left to consumer repos (rule 20) | Artifacts/contracts shipped here; actual dep wiring belongs in HOW/ottolax | ✓ Good (deferred cross-repo) |
+| Bun+Hono replaced the originally-assumed FastAPI plan | All-TS decision + `@geo/core` reuse; superseded the early Python/FastAPI research | ✓ Good |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
+**After each phase transition** (via `/gsd-transition`): requirements invalidated/validated/emerged → update; decisions → log; "What This Is" → update if drifted.
 
-**After each milestone** (via `/gsd:complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+**After each milestone** (via `/gsd:complete-milestone`): full review of all sections; Core Value check; audit Out of Scope; update Current State + Context.
 
 ---
-*Last updated: 2026-06-01 after initialization*
+*Last updated: 2026-06-05 after v1.0 milestone*

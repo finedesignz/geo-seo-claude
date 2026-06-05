@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: Phase 7 plan 07-03 complete (consumer artifacts)
-last_updated: "2026-06-05T04:13:13.926Z"
+milestone_name: Automated GEO Audit Service
+status: shipped
+stopped_at: v1.0 milestone shipped & archived (2026-06-05)
+last_updated: "2026-06-05T00:00:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -17,26 +17,23 @@ progress:
 
 ## Project Reference
 
-**Core Value:** Any consumer app can POST a URL and get back a 0–100 GEO Score with findings, fully automated — deterministic ~80% as plain shared TS code, only irreducible judgment as a single structured LLM call.
+See: .planning/PROJECT.md (updated 2026-06-05 after v1.0 milestone)
+
+**Core value:** Any consumer app can POST a URL and reliably get back a 0–100 GEO Score with findings, fully automated — deterministic ~80% as plain shared TS code, only irreducible judgment as a single structured LLM call.
+**Current focus:** v1.0 SHIPPED & archived. Next: operator live Coolify deploy + `deploy-verify.sh`, then the two cross-repo consumer wirings (HOW, ottolax). Then plan next milestone (`/gsd:new-milestone`).
 
 **Repo:** `C:\Users\artic\GitHub\geo-seo-claude`
-**Stack:** Bun + Hono (`@hono/zod-openapi`), `@anthropic-ai/sdk`, Coolify Postgres, `@geo/core` (zero-dep TS), Docker
+**Stack:** Bun + Hono (`@hono/zod-openapi` + Scalar), `@anthropic-ai/sdk`, Coolify Postgres (postgres.js), `@geo/core` (zero-dep TS), undici + ipaddr.js, single multi-stage Docker image.
 
 ---
 
 ## Current Position
 
-Phase: 06 (containerize-coolify-deploy) — EXECUTING
-Plan: 06-03 COMPLETE-DEFERRED (Wave 3 — live Coolify deploy recorded DEFERRED-LIVE; human gate unmet: no app/Postgres provisioned, branch unpushed, secrets absent). All Phase-6 build/deploy artifacts complete. DEPLOY-04 live verify → Phase-7 precondition (operator runs deploy-verify.sh). Record: DEPLOY-RECORD.md.
-Plan: 06-02 COMPLETE (Wave 2 — env-driven deploy-verify smoke script + Coolify deploy runbook; DEPLOY-03, DEPLOY-04).
-Plan: 06-01 COMPLETE (Wave 1 — multi-stage Dockerfile + secret-free .dockerignore + worker heartbeat/healthcheck + 12-factor .env.example; DEPLOY-01, DEPLOY-03). docker build deferred (no docker in env → Coolify build, plan 03)
-**Phase:** 3 — Postgres Schema & Durable Job Queue — EXECUTING
-**Plan:** Plan 02 COMPLETE — typed DAL + SKIP LOCKED claim + lifecycle/queue/concurrency tests (DATA-01, DATA-02, WORK-01)
-**Status:** Executing Phase 05
-**Branch:** phase-01-geo-core-deterministic-package
+**Milestone v1.0 — Automated GEO Audit Service — SHIPPED 2026-06-05.**
+All 7 phases / 26 plans complete + independently verified. 372 tests passing. Audit passed (0 real gaps). Live production deploy DEFERRED-LIVE behind operator Coolify gate; HOW/ottolax consumer wiring DEFERRED cross-repo (rule 20).
 
 ```
-Progress: [█████████░] 94%
+Progress: [██████████] 100%
            1   2   3   4   5   6   7
 ```
 
@@ -46,118 +43,43 @@ Progress: [█████████░] 94%
 
 | # | Name | Status |
 |---|------|--------|
-| 1 | @geo/core — Deterministic Package | COMPLETE (Plans 00-06, CORE-01..06) |
-| 2 | SSRF & Fetch Hardening | EXECUTING (Plan 00 done) |
-| 3 | Postgres Schema & Durable Job Queue | EXECUTING (Plan 00 done) |
-| 4 | Worker Pipeline | Not started |
-| 5 | Bun+Hono API Layer | Not started |
-| 6 | Containerize & Coolify Deploy | Not started |
-| 7 | Cron + Consumer Wiring | Not started |
-
----
-
-## Performance Metrics
-
-- Phases completed: 0/7
-- Requirements shipped: 6/35 (CORE-01..06)
-- Plans executed: 8 (Phase 1 complete, Phase 2 Plan 00 done)
-
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
-| 01-00 Walking Skeleton | ~15 min | 2 | 15 |
-| 01-01 checkRobots | ~10 min | 1 | 3 |
-| 01-02 llmstxt generator/validator | ~5 min | 1 | 3 |
-| 01-03 schema templates + structured data | ~10 min | 1 | 4 |
-| 01-04 citability scoring | ~15 min | 1 | 4 |
-| 01-05 detectRendering SSR/CSR/hybrid | ~10 min | 1 | 4 |
-| 01-06 phase gate + dual ESM/CJS | ~15 min | 3 | 10 |
-| 02-00 @geo/fetch scaffold + IP classifier | ~10 min | 2 | 11 |
-| 02-01 createSafeFetcher + resolve-then-pin | ~20 min | 2 | 6 |
-| 02-02 manual redirects + per-hop SSRF | ~15 min | 2 | 5 |
-| 02-03 size cap + decompression-bomb + phase gate | ~15 min | 2 | 7 |
-| 03-00 @geo/db scaffold + getSql guard + PGlite harness | ~15 min | 3 | 11 |
-| 03-01 migration runner + 0001_create_audits schema | ~15 min | 2 | 5 |
-| 03-02 typed DAL + SKIP LOCKED claim + lease fencing + tests | ~20 min | 3 | 7 |
-| 05-00 Wave 0: consumer_id DAL + SSRF POST + @geo/api scaffold | ~25 min | 3 | 19 |
-| 05-01 Wave 1: bearer auth + POST /audit (validate/dedup/SSRF) | ~20 min | 2 | 8 |
-| 05-02 Wave 2: GET poll/history/healthz + OpenAPI/Scalar/docs + webhook | ~30 min | 3 | 17 |
-| 06-01 Wave 1: Dockerfile + .dockerignore + worker heartbeat/healthcheck + .env.example | ~15 min | 3 | 5 |
-| 06-02 Wave 2: deploy-verify smoke script + Coolify deploy runbook | ~12 min | 2 | 2 |
-| 06-03 Wave 3: live deploy DEFERRED-LIVE (human gate) — DEPLOY-RECORD.md | ~8 min | 1 | 1 |
-| 07-01 Wave 1: @geo/cron one-shot caller (env fail-fast + runCron loop + in-process app/PGlite tests) — DEPLOY-02 | ~20 min | 2 | 11 |
-| 07-02 Wave 2: cron run target (Dockerfile manifest copy) + .env.example CRON block + deploy.md scheduled-task runbook — DEPLOY-02/03 | ~8 min | 2 | 3 |
+| 1 | @geo/core — Deterministic Package | COMPLETE (2026-06-02) |
+| 2 | SSRF & Fetch Hardening | COMPLETE (2026-06-02) |
+| 3 | Postgres Schema & Durable Job Queue | COMPLETE (2026-06-02) |
+| 4 | Worker Pipeline | COMPLETE (2026-06-03) |
+| 5 | Bun+Hono API Layer | COMPLETE (2026-06-04) |
+| 6 | Containerize & Coolify Deploy | COMPLETE (2026-06-04; live deploy DEFERRED-LIVE) |
+| 7 | Cron + Consumer Wiring | COMPLETE (2026-06-05; consumer wiring DEFERRED cross-repo) |
 
 ---
 
 ## Accumulated Context
 
-### Key Decisions
-
-- Plan 00: FetchResult.headers lowercase-keyed; normalization is caller responsibility (D-05)
-- Plan 00: tsconfig ignoreDeprecations:6.0 required for TS 6.0.3 + tsup DTS + moduleResolution:bundler
-- Plan 00: AI_CRAWLERS as readonly const tuple from scripts/fetch_page.py keys
-- All-TS stack: Bun+Hono service + zero-dep `@geo/core` TS package
-- Python scrapers ported to TS inside `@geo/core` (not reused in-process)
-- Scoring = single `@anthropic-ai/sdk` structured call with JSON output schema + prompt caching (NOT `claude -p`)
-- `@geo/core` lives in/alongside HOW's packages; ottolax consumes via HTTP only
-- Job queue = Postgres `SELECT FOR UPDATE SKIP LOCKED` (no Redis/Celery)
-- SqlExecutor interface as portable injection seam — postgres.js + PGlite both satisfy via adapters
-- completeJob/failJob return bool (not throw) on stale lease_token — Phase 4 worker logs and continues
-- reclaimExpired runs inside claimNextJob's transaction so expired leases are claimable in same pass
-- SSRF hardening is a hard prerequisite before any URL-accepting feature ships
-- isBlockedIP strategy: deny range() !== "unicast" (fail-closed D-04); ipaddr.js 2.4.0 normalizes obfuscated forms
-- IPv4-mapped IPv6 unwrapped via isIPv4MappedAddress()+toIPv4Address() before range check (T-02-01)
-- FetchErrorCode as const object not enum (avoids TS const-enum cross-module pitfall)
-- resolve-then-pin: single resolveAndValidate call → pinned IP in URL + undici Agent(connect.servername=hostname) — no dns-interceptor
-- Direct IP literals (decimal/octal/hex/IPv4-mapped IPv6) detected and blocked without DNS round-trip
-- _testDispatcher seam in SafeFetcherOptions: post-validation only; resolveAndValidate always runs in production
-- `callback_url` webhook uses same SSRF guard as audit URL
-- makeByteCounter placed after final decompressor so cap is on decompressed bytes (02-03)
-- stacked encoding cap is 2; enforced synchronously in buildDecompressChain before streaming (02-03)
-- tsconfig.check.json created (rootDir='.') for tsc --noEmit including test helpers (02-03)
-- Flask CRM (`scripts/webapp/app.py`) untouched this milestone
-- 05-00: consumer dedup/history use `consumer_id = $consumer` equality (legacy null rows never match)
-- 05-00: @hono/zod-openapi@0.19.10 + @scalar/hono-api-reference@0.10.20 keep zod v3 (3.25.51); Scalar's nested zod v4 is isolated
-- 05-00: validateUrl exported from safe-fetcher and reused by safe-requester (SSRF POST), no validator duplication
-- 05-00: createApp({dal,fetcher}) DI factory — no module-level singleton DAL
-- 05-01: GEO_API_KEYS parse splits on FIRST unescaped ':'; backslash escaping for ','/':'-bearing tokens (D-03)
-- 05-01: token compare = sha256 both sides → timingSafeEqual (length-safe, all-keys iteration for timing)
-- 05-01: DEDUP_TTL_MS=1h; consumer-scoped dedup skips status==='failed' (re-enqueue, D-13)
-- 05-01: callbackResolver injected via AppDeps so submit-time SSRF check is testable without network
-- 05-02: response DTOs explicit (no raw AuditJob row); internal columns never serialized (D-15); poll findings = z.record (z.unknown collapses DTS body to never)
-- 05-02: GET /audit + /audits ownership-scoped 404 / consumer-equality history (no cross-consumer read)
-- 05-02: /healthz deep check via additive AuditDal.ping() (SELECT 1); tests force 503 by closing PGlite
-- 05-02: BearerAuth registered via registerComponent; docs/api.md generated by scripts/gen-docs (rule 21)
-- 05-02: webhook fired non-fatally (void+.catch) at completeJob + 3 terminal failJob sites; fire-time SSRF re-validation via real createSafeRequester (API-08, D-08/D-12)
-- 06-01: one image, role by start-command override (no entrypoint branch); no global Dockerfile HEALTHCHECK (per-resource in Coolify); worker liveness = file heartbeat
-- 06-02: deploy-verify.sh env-only (GEO_API_BASE/GEO_API_TOKEN, no hardcode); runbook splits [HUMAN GATE] Coolify UI vs [AUTOMATABLE] Coolify API; UUIDs left as placeholders for plan 03/Phase 7
-- 06-03: live deploy DEFERRED-LIVE (gate-deferred) — no Coolify app/Postgres provisioned, branch unpushed (third-party origin), secrets absent; operator/human gate (rule 9). All artifacts ship; DEPLOY-04 + Phase-5 live items → Phase-7 precondition discharged by operator deploy-verify.sh run
-- 07-02: cron is the fourth run target off the SAME image — only a deps-stage manifest COPY added (no new stage/CMD); role-by-command preserved. CRON_SCHEDULE is informational (Coolify Scheduled-Task field is the real clock). Hard cadence constraint: must fire <1h or DEDUP_TTL (1h, no force flag) silently dedups. Live firing DEFERRED-LIVE behind operator deploy
+Full decision log and architecture in `.planning/PROJECT.md` (Key Decisions) and `.planning/milestones/v1.0-ROADMAP.md`.
 
 ### Architecture Pointers
 
-- Bootstrap from `_templates/bun-hono-app/` (global rule 21)
-- `DATABASE_URL` + `ANTHROPIC_API_KEY` + auth key → Coolify env only
-- `/openapi.json` + `/docs` (Scalar) mandatory (global rule 21)
-- Deploy verify = `/healthz` + real audit round-trip (global rule 14)
+- `DATABASE_URL` + `ANTHROPIC_API_KEY` + `GEO_API_KEYS` → Coolify env only.
+- `/openapi.json` + Scalar `/docs` mandatory (rule 21).
+- Deploy verify = `/healthz` + real audit round-trip (rule 14) via `deploy-verify.sh`.
+- Single image, role-by-command (api/worker/cron). Bootstrap pattern from `_templates/bun-hono-app/`.
 
 ### Blockers
 
 None.
 
-### Open TODOs
+### Open Follow-ups (operator / cross-repo — carried past v1.0)
 
-- Cut phase-1 branch before starting implementation
-- Confirm HOW's monorepo `packages/` path for @geo/core placement
-- Confirm Coolify app UUID for deploy wiring (Phase 6)
+- **Operator (DEFERRED-LIVE):** provision Coolify app + Postgres + secrets, push branch/tag (third-party origin needs operator auth), run `deploy-verify.sh`. See `.planning/phases/06-containerize-coolify-deploy/DEPLOY-RECORD.md` + `docs/deploy.md`.
+- **Cross-repo (rule 20):** wire HOW to `@geo/core` (CONS-01); wire ottolax to the Python client (CONS-02).
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-06-05T04:13:13.916Z
-**Stopped at:** Phase 7 plan 07-03 complete (consumer artifacts)
-**Next action:** Phase 7 — 07-03 (consumer artifacts: examples/how-inline-usage.ts CONS-01, examples/ottolax-client.py + docs/consumers.md CONS-02)
+**Last session:** 2026-06-05
+**Stopped at:** v1.0 milestone shipped & archived (ROADMAP/REQUIREMENTS/audit archived, PROJECT.md evolved, tag v1.0 created locally).
+**Next action:** Operator live deploy + deploy-verify, then cross-repo consumer wiring; then `/gsd:new-milestone` for v2 (REP-01/02, OPS-01/02, LISTEN/NOTIFY dispatcher).
 
 ---
-*State initialized: 2026-06-01*
+*State initialized: 2026-06-01 · v1.0 shipped 2026-06-05*
