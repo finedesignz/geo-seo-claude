@@ -26,8 +26,8 @@ progress:
 
 ## Current Position
 
-Phase: 05 (bun-hono-api-layer) — EXECUTING
-Plan: 3 of 3 COMPLETE (Wave 0 prereqs + Wave 1 auth/submit + Wave 2 read/docs/webhook)
+Phase: 06 (containerize-coolify-deploy) — EXECUTING
+Plan: 06-01 COMPLETE (Wave 1 — multi-stage Dockerfile + secret-free .dockerignore + worker heartbeat/healthcheck + 12-factor .env.example; DEPLOY-01, DEPLOY-03). docker build deferred (no docker in env → Coolify build, plan 03)
 **Phase:** 3 — Postgres Schema & Durable Job Queue — EXECUTING
 **Plan:** Plan 02 COMPLETE — typed DAL + SKIP LOCKED claim + lifecycle/queue/concurrency tests (DATA-01, DATA-02, WORK-01)
 **Status:** Executing Phase 05

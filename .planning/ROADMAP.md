@@ -119,7 +119,7 @@
   3. No secret (DATABASE_URL, ANTHROPIC_API_KEY, API auth key) appears in the image or any committed file
   4. A service redeploy (new image push) does not lose in-flight or queued jobs
 **Plans**: 3 plans
-- [ ] 06-01-PLAN.md — Dockerfile + .dockerignore + .env.example + worker heartbeat/healthcheck
+- [x] 06-01-PLAN.md — Wave 1: multi-stage Dockerfile (pinned oven/bun, role-by-command, prod prune) + secret-free .dockerignore + worker liveness heartbeat/healthcheck + full 12-factor .env.example (DEPLOY-01, DEPLOY-03)
 - [ ] 06-02-PLAN.md — deploy-verify smoke script + Coolify deploy runbook (docs/deploy.md)
 - [ ] 06-03-PLAN.md — live Coolify deploy + smoke (human-gate dependent)
 
