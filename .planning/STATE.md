@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-06-05T02:43:51.123Z"
+stopped_at: Phase 6 complete (06-03 live deploy DEFERRED-LIVE — human gate)
+last_updated: "2026-06-04T00:00:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 5
@@ -27,7 +27,8 @@ progress:
 ## Current Position
 
 Phase: 06 (containerize-coolify-deploy) — EXECUTING
-Plan: 06-02 COMPLETE (Wave 2 — env-driven deploy-verify smoke script + Coolify deploy runbook; DEPLOY-03, DEPLOY-04). Next: 06-03 live deploy (human gate).
+Plan: 06-03 COMPLETE-DEFERRED (Wave 3 — live Coolify deploy recorded DEFERRED-LIVE; human gate unmet: no app/Postgres provisioned, branch unpushed, secrets absent). All Phase-6 build/deploy artifacts complete. DEPLOY-04 live verify → Phase-7 precondition (operator runs deploy-verify.sh). Record: DEPLOY-RECORD.md.
+Plan: 06-02 COMPLETE (Wave 2 — env-driven deploy-verify smoke script + Coolify deploy runbook; DEPLOY-03, DEPLOY-04).
 Plan: 06-01 COMPLETE (Wave 1 — multi-stage Dockerfile + secret-free .dockerignore + worker heartbeat/healthcheck + 12-factor .env.example; DEPLOY-01, DEPLOY-03). docker build deferred (no docker in env → Coolify build, plan 03)
 **Phase:** 3 — Postgres Schema & Durable Job Queue — EXECUTING
 **Plan:** Plan 02 COMPLETE — typed DAL + SKIP LOCKED claim + lifecycle/queue/concurrency tests (DATA-01, DATA-02, WORK-01)
@@ -82,6 +83,7 @@ Progress: [█████████░] 94%
 | 05-02 Wave 2: GET poll/history/healthz + OpenAPI/Scalar/docs + webhook | ~30 min | 3 | 17 |
 | 06-01 Wave 1: Dockerfile + .dockerignore + worker heartbeat/healthcheck + .env.example | ~15 min | 3 | 5 |
 | 06-02 Wave 2: deploy-verify smoke script + Coolify deploy runbook | ~12 min | 2 | 2 |
+| 06-03 Wave 3: live deploy DEFERRED-LIVE (human gate) — DEPLOY-RECORD.md | ~8 min | 1 | 1 |
 
 ---
 
@@ -127,6 +129,7 @@ Progress: [█████████░] 94%
 - 05-02: webhook fired non-fatally (void+.catch) at completeJob + 3 terminal failJob sites; fire-time SSRF re-validation via real createSafeRequester (API-08, D-08/D-12)
 - 06-01: one image, role by start-command override (no entrypoint branch); no global Dockerfile HEALTHCHECK (per-resource in Coolify); worker liveness = file heartbeat
 - 06-02: deploy-verify.sh env-only (GEO_API_BASE/GEO_API_TOKEN, no hardcode); runbook splits [HUMAN GATE] Coolify UI vs [AUTOMATABLE] Coolify API; UUIDs left as placeholders for plan 03/Phase 7
+- 06-03: live deploy DEFERRED-LIVE (gate-deferred) — no Coolify app/Postgres provisioned, branch unpushed (third-party origin), secrets absent; operator/human gate (rule 9). All artifacts ship; DEPLOY-04 + Phase-5 live items → Phase-7 precondition discharged by operator deploy-verify.sh run
 
 ### Architecture Pointers
 

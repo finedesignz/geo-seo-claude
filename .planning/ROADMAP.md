@@ -121,7 +121,7 @@
 **Plans**: 3 plans
 - [x] 06-01-PLAN.md — Wave 1: multi-stage Dockerfile (pinned oven/bun, role-by-command, prod prune) + secret-free .dockerignore + worker liveness heartbeat/healthcheck + full 12-factor .env.example (DEPLOY-01, DEPLOY-03)
 - [x] 06-02-PLAN.md — Wave 2: env-driven deploy-verify smoke script (healthz→docs→401→authed audit round-trip) + Coolify deploy runbook docs/deploy.md (DEPLOY-03, DEPLOY-04)
-- [ ] 06-03-PLAN.md — live Coolify deploy + smoke (human-gate dependent)
+- [x] 06-03-PLAN.md — live Coolify deploy + smoke: DEFERRED-LIVE (human gate unmet — no app/Postgres provisioned, branch unpushed, secrets absent). DEPLOY-RECORD.md records readiness + operator checklist; DEPLOY-04 live verify → Phase-7 precondition
 
 ### Phase 7: Cron + Consumer Wiring
 **Goal**: Scheduled re-audits run automatically, hyperoptimizedwebsites imports @geo/core inline, and ottolax triggers on-demand audits over HTTP — both consumers fully wired.
@@ -145,7 +145,7 @@
 | 3. Postgres Schema & Durable Job Queue | 3/3 | COMPLETE | 2026-06-02 |
 | 4. Worker Pipeline | 3/3 | Complete   | 2026-06-03 |
 | 5. Bun+Hono API Layer | 0/0 | Not started | - |
-| 6. Containerize & Coolify Deploy | 0/0 | Not started | - |
+| 6. Containerize & Coolify Deploy | 3/3 | Artifacts complete; live deploy DEFERRED (human gate) | 2026-06-04 |
 | 7. Cron + Consumer Wiring | 0/0 | Not started | - |
 
 ---
