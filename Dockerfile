@@ -36,7 +36,12 @@ RUN bun install --frozen-lockfile
 FROM deps AS build
 WORKDIR /app
 COPY . .
-RUN bun run --filter '*' build
+RUN cd packages/core   && bun run build \
+ && cd /app/packages/fetch  && bun run build \
+ && cd /app/packages/db     && bun run build \
+ && cd /app/packages/api    && bun run build \
+ && cd /app/packages/worker && bun run build \
+ && cd /app/packages/cron   && bun run build
 
 # ---------------------------------------------------------------------------
 # runtime — slim, non-root, production-pruned dependency tree.
