@@ -50,7 +50,7 @@ FROM oven/bun:1.3.1-slim AS runtime
 ENV NODE_ENV=production
 # Install curl for Coolify in-container health checks (slim image has none).
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl wget && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Bring in manifests + built workspace, then re-resolve with dev deps pruned.
