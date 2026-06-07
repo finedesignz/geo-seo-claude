@@ -25,6 +25,7 @@ COPY packages/db/package.json     ./packages/db/package.json
 COPY packages/api/package.json    ./packages/api/package.json
 COPY packages/worker/package.json ./packages/worker/package.json
 COPY packages/cron/package.json   ./packages/cron/package.json
+COPY examples/package.json        ./examples/package.json
 
 RUN bun install --frozen-lockfile
 
@@ -50,6 +51,7 @@ WORKDIR /app
 # postgres (@geo/db) — /docs + /openapi.json are served in-code (06-REVIEWS #1).
 COPY package.json bun.lock ./
 COPY --from=build /app/packages ./packages
+COPY examples/package.json ./examples/package.json
 RUN bun install --frozen-lockfile --production
 
 # Non-root (official oven/bun image ships an unprivileged `bun` user — T-06-03).
