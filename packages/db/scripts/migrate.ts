@@ -11,7 +11,6 @@
 
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getSql } from "../src/client.js";
 import { runMigrations, listApplied, type MigrationDb } from "../src/migrate.js";
 import postgres from "postgres";
 
@@ -19,6 +18,29 @@ import postgres from "postgres";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const MIGRATIONS_DIR = join(__dirname, "..", "migrations");
+
+/**
+ * Build a DEDICATED single-connection (max: 1) postgres.js client for migrations.
+ *
+ * The runner (`runMigrations`) wraps each migration in a manual BEGIN/COMMIT issued
+ * as separate statements. postgres.js forbids manual transactions over a connection
+ * POOL (max > 1) — it raises `UNSAFE_TRANSACTION: Only use sql.begin, sql.reserved or
+ * max: 1` because consecutive statements can land on different pooled connections.
+ * The shared app pool (getSql, max: 10) therefore cannot run migrations; a single
+ * pinned connection makes the manual transaction safe and also serialises the run.
+ * (Tests use the single-connection PGlite executor, which never hit this path.)
+ */
+function getMigrationSql(): ReturnType<typeof postgres> {
+  const url = process.env["DATABASE_URL"];
+  if (!url) {
+    throw new Error(
+      "@geo/db: DATABASE_URL is required but not set. " +
+        "Set DATABASE_URL in your environment (see .env.example). " +
+        "Do not include a real connection string in any committed file.",
+    );
+  }
+  return postgres(url, { max: 1, connect_timeout: 10 });
+}
 
 // Wrap postgres.js sql instance to satisfy MigrationDb interface
 function wrapSql(sql: ReturnType<typeof postgres>): MigrationDb {
@@ -40,7 +62,7 @@ function wrapSql(sql: ReturnType<typeof postgres>): MigrationDb {
 const subcommand = process.argv[2];
 
 if (subcommand === "status") {
-  const sql = getSql();
+  const sql = getMigrationSql();
   const db = wrapSql(sql);
   const applied = await listApplied(db);
   if (applied.length === 0) {
@@ -53,7 +75,7 @@ if (subcommand === "status") {
   }
   await sql.end();
 } else {
-  const sql = getSql();
+  const sql = getMigrationSql();
   const db = wrapSql(sql);
   const applied = await runMigrations(db, MIGRATIONS_DIR);
   if (applied.length === 0) {
