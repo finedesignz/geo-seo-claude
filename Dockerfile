@@ -2,11 +2,14 @@
 #
 # geo-seo-claude — single multi-stage image for the whole Bun workspace.
 #
-# Roles (one image, role selected by START COMMAND at deploy time — D-01/D-03):
-#   API     (default CMD) : bun packages/api/dist/main.js      (PORT default 8080)
-#   Worker  (override)    : bun packages/worker/dist/main.js   (no port; SIGTERM drain)
-#   Migrate (pre-deploy)  : bun packages/db/scripts/migrate.ts (TS source; advisory-locked, idempotent)
-#   Cron    (scheduled task) : bun packages/cron/dist/main.js  (one-shot; Coolify cron expr)
+# Roles (one image, role selected by the GEO_ROLE env var via scripts/docker-entrypoint.sh):
+#   GEO_ROLE=api    (default) : bun packages/api/dist/main.js      (PORT default 8080)
+#   GEO_ROLE=worker           : bun packages/worker/dist/main.js   (no port; SIGTERM drain)
+#   GEO_ROLE=cron             : bun packages/cron/dist/main.js     (one-shot; Coolify scheduled task)
+#   Migrate (pre-deploy)      : bun packages/db/scripts/migrate.ts (TS source; advisory-locked, idempotent)
+#
+# NOTE: role is GEO_ROLE-driven (not a per-resource start command) because Coolify's
+# Dockerfile build pack does not honor start-command overrides (verified 4.1.1).
 #
 # Base image is PINNED to an exact oven/bun patch tag (D-02) — never :latest.
 # Secrets are NEVER baked in — injected via Coolify env (D-07); .dockerignore drops .env*.
@@ -59,6 +62,7 @@ WORKDIR /app
 # postgres (@geo/db) — /docs + /openapi.json are served in-code (06-REVIEWS #1).
 COPY package.json bun.lock ./
 COPY --from=build /app/packages ./packages
+COPY --from=build /app/scripts ./scripts
 COPY examples/package.json ./examples/package.json
 RUN bun install --frozen-lockfile --production
 
@@ -74,8 +78,10 @@ STOPSIGNAL SIGTERM
 # no heartbeat. Health is configured PER-RESOURCE in Coolify (worker uses
 # scripts/worker-healthcheck.sh; API uses an HTTP probe). See plan 02 runbook.
 
-# Default role = API. Worker/migrate are reached by overriding the start command.
-CMD ["bun", "packages/api/dist/main.js"]
+# Role dispatch via GEO_ROLE (default api). See scripts/docker-entrypoint.sh — Coolify
+# Dockerfile build pack does not honor per-resource start-command overrides, so the
+# worker/cron roles are selected by setting GEO_ROLE in the Coolify resource env.
+ENTRYPOINT ["sh", "scripts/docker-entrypoint.sh"]
 
 # ---------------------------------------------------------------------------
 # tini fallback (D-09 / Q3) — ENABLE ONLY if Coolify cannot set `--init` per
