@@ -48,7 +48,9 @@ Enter in the Coolify UI — **never committed**. Names/defaults come from `.env.
 | Var                    | API | Worker | Migrate | Notes                                              |
 |------------------------|:---:|:------:|:-------:|----------------------------------------------------|
 | `DATABASE_URL`         |  ✔  |   ✔    |    ✔    | Coolify-internal Postgres URL (secret)             |
-| `ANTHROPIC_API_KEY`    |     |   ✔    |         | scoring model key (secret; worker only)            |
+| `SCORING_PROVIDER`     |     |   ✔    |         | `api` (default w/ key) or `cli` (Claude subscription) |
+| `ANTHROPIC_API_KEY`    |     |  ✔*    |         | scoring key (secret) — required when `SCORING_PROVIDER=api` |
+| `CLAUDE_CODE_OAUTH_TOKEN` | |  ✔*    |         | `claude setup-token` output (secret) — required when `SCORING_PROVIDER=cli` |
 | `GEO_API_KEYS`         |  ✔  |        |         | bearer allow-list `token:consumer_id,...` (secret) |
 | `PORT`                 |  ✔  |        |         | default 8080 (match the resource's HTTP port)      |
 | `SHUTDOWN_GRACE_MS`    |     |   ✔    |         | default 30000 — see stop grace (step 4)            |
@@ -57,6 +59,16 @@ Enter in the Coolify UI — **never committed**. Names/defaults come from `.env.
 
 The bearer used by `deploy-verify.sh` (`GEO_API_TOKEN`) is the **token part before the `:`**
 of one `GEO_API_KEYS` entry.
+
+**Scoring provider — API key vs Claude subscription.** The worker scores either via
+the Anthropic Messages API (`SCORING_PROVIDER=api`, needs `ANTHROPIC_API_KEY`) or via the
+**Claude Code CLI** against a Claude subscription (`SCORING_PROVIDER=cli`). For `cli`:
+1. On a machine logged into the subscription, run `claude setup-token` → copy the long-lived token.
+2. Set `CLAUDE_CODE_OAUTH_TOKEN=<token>` in the worker resource env (and `SCORING_PROVIDER=cli`).
+3. The runtime image already bundles the `claude` binary (Dockerfile installs `@anthropic-ai/claude-code`).
+The worker strips `ANTHROPIC_API_KEY` from the CLI's environment so it always bills the
+subscription, never the API. Note: a consumer subscription is intended for interactive use —
+prefer an `ANTHROPIC_API_KEY` for production customer audit volume (rate limits + ToS).
 
 ### 3. Two Application resources off the same image  **[HUMAN GATE]**
 

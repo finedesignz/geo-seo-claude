@@ -51,9 +51,22 @@ RUN cd packages/core   && bun run build \
 # ---------------------------------------------------------------------------
 FROM oven/bun:1.3.1-slim AS runtime
 ENV NODE_ENV=production
-# Install curl for Coolify in-container health checks (slim image has none).
+# Pin the Claude Code CLI version (subscription scoring path). Override at build:
+#   --build-arg CLAUDE_CODE_VERSION=x.y.z
+ARG CLAUDE_CODE_VERSION=latest
+# Install curl/wget for Coolify in-container health checks (slim image has none),
+# plus Node.js + the Claude Code CLI used by the worker when SCORING_PROVIDER=cli.
+# The `claude` binary authenticates via CLAUDE_CODE_OAUTH_TOKEN (subscription) —
+# see packages/worker/src/cli-scorer.ts. API mode (SCORING_PROVIDER=api) ignores it.
+# Shared image: api/cron roles carry the CLI too (harmless, unused by them).
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends curl wget && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl wget ca-certificates \
+ && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+ && npm cache clean --force \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Bring in manifests + built workspace, then re-resolve with dev deps pruned.
