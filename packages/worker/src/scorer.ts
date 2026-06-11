@@ -31,8 +31,10 @@ export class ScoringError extends Error {
       | "SCORING_API_ERROR"
       | "SCORING_MALFORMED_OUTPUT",
     public readonly retryable: boolean,
+    /** Optional debug detail appended to the message (must be secret-safe). */
+    detail?: string,
   ) {
-    super(code);
+    super(detail ? `${code}: ${detail}` : code);
     this.name = "ScoringError";
   }
 }
