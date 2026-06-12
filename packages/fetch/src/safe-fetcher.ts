@@ -244,6 +244,13 @@ export function createSafeFetcher(options: SafeFetcherOptions = {}): (url: strin
             method: "GET",
             headers: {
               host: hostHeader,
+              // Request gzip/deflate ONLY — never brotli. Bun's node:zlib brotli
+              // decoder (baseline build) throws ERR_BROTLI_DECODER_ERROR_FORMAT_RESERVED
+              // on streams Node decodes fine; excluding `br` avoids it entirely while
+              // still letting origins compress. A misbehaving origin that sends `br`
+              // anyway is handled gracefully (decoder errors → FETCH_ERROR, never a
+              // process crash — see readBodyBounded).
+              "accept-encoding": "gzip, deflate",
             },
             dispatcher,
             headersTimeout: timeoutMs,
@@ -394,7 +401,7 @@ export function createSafeFetcher(options: SafeFetcherOptions = {}): (url: strin
  * Rejects with an error carrying `.code = RESPONSE_TOO_LARGE | DECOMPRESSION_BOMB`
  * if either cap is exceeded.
  */
-async function readBodyBounded(
+export async function readBodyBounded(
   body: { [Symbol.asyncIterator](): AsyncIterator<Buffer | Uint8Array> },
   decompressChain: NodeJS.ReadWriteStream[],
   maxBytes: number,
@@ -414,17 +421,37 @@ async function readBodyBounded(
   const chunks: Buffer[] = [];
 
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const fail = (err: unknown) => {
+      if (settled) return;
+      settled = true;
+      // Tear down the source so the undici socket is released on any stage error.
+      source.destroy();
+      reject(err);
+    };
+
     last.on("data", (chunk: Buffer | Uint8Array) => {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     });
-    last.on("end", resolve);
-    last.on("error", reject);
+    last.on("end", () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    });
+
+    // Attach an error handler to EVERY stage — .pipe() does not forward errors,
+    // so a middle decompressor (e.g. brotli) erroring would otherwise be an
+    // unhandled 'error' event that crashes the process. Route them all to fail().
+    source.on("error", fail);
+    for (const stage of stages) {
+      stage.on("error", fail);
+    }
 
     let current: NodeJS.ReadableStream = source;
     for (const stage of stages) {
       current = current.pipe(stage as unknown as NodeJS.WritableStream & NodeJS.ReadableStream);
     }
-    source.on("error", reject);
   });
 
   return Buffer.concat(chunks).toString("utf8");
