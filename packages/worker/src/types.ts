@@ -10,8 +10,9 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
-import type { AuditDal } from "@geo/db";
+import type { AuditDal, FindingsShape } from "@geo/db";
 import type { Fetcher } from "@geo/core";
+import type { ScoreResult } from "./scorer.js";
 
 // ---------------------------------------------------------------------------
 // Anthropic SDK injection seam
@@ -28,6 +29,19 @@ export interface AnthropicMessagesClient {
       options?: Anthropic.RequestOptions,
     ): Promise<Anthropic.Message>;
   };
+}
+
+// ---------------------------------------------------------------------------
+// Scorer injection seam
+// ---------------------------------------------------------------------------
+
+/**
+ * The scorer contract consumed by the pipeline. Both createScorer (API path,
+ * scorer.ts) and createCliScorer (Claude Code CLI path, cli-scorer.ts) satisfy
+ * it, so the worker loop can be wired with either behind a provider switch.
+ */
+export interface Scorer {
+  score(findings: FindingsShape, signal?: AbortSignal): Promise<ScoreResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +80,17 @@ export interface WorkerOptions {
 
   // ---- injectable DAL + client ----
   dal: AuditDal;
-  anthropic: AnthropicMessagesClient;
+  /**
+   * Anthropic Messages client for the API scoring path. Optional: when a
+   * pre-built `scorer` is supplied (e.g. the CLI scorer), this is unused.
+   */
+  anthropic?: AnthropicMessagesClient;
+  /**
+   * Pre-built scorer. When provided, the worker uses it directly instead of
+   * constructing the API scorer from `anthropic`. Set by the provider switch in
+   * main.ts (CLI vs API); tests may inject a fake.
+   */
+  scorer?: Scorer;
 
   // ---- injectable fetcher factory ----
   /** Returns a Fetcher for a given audit run. Defaults to @geo/fetch in prod. */

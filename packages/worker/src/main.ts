@@ -12,16 +12,21 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { assertEnv } from "./env.js";
+import { assertEnv, resolveScoringProvider } from "./env.js";
 import { getDefaultDal } from "@geo/db";
 import { createSafeFetcher } from "@geo/fetch";
 import { runWorker } from "./worker.js";
+import { createCliScorer } from "./cli-scorer.js";
+import type { Scorer } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Fail-fast env check (MUST be first — before any await)
 // ---------------------------------------------------------------------------
 
-assertEnv();
+// "api"  → Anthropic Messages API + ANTHROPIC_API_KEY
+// "cli"  → Claude Code CLI (subscription) via CLAUDE_CODE_OAUTH_TOKEN / login
+const SCORING_PROVIDER = resolveScoringProvider();
+assertEnv(SCORING_PROVIDER);
 
 // ---------------------------------------------------------------------------
 // Env parsing with defaults
@@ -47,11 +52,25 @@ const SCORING_MODEL = process.env["SCORING_MODEL"] ?? "claude-sonnet-4-6";
 // Build production dependencies
 // ---------------------------------------------------------------------------
 
-// maxRetries: 0 is MANDATORY — see file header (T-04-RETRY / RESEARCH Pitfall 1)
-const anthropic = new Anthropic({
-  apiKey: process.env["ANTHROPIC_API_KEY"]!,
-  maxRetries: 0,
-});
+// Build the scorer for the selected provider.
+// - CLI: spawn the logged-in `claude` binary (subscription); no API client.
+// - API: Anthropic Messages client with maxRetries:0 (MANDATORY — see file
+//   header, T-04-RETRY / RESEARCH Pitfall 1).
+let scorer: Scorer | undefined;
+let anthropic: Anthropic | undefined;
+
+if (SCORING_PROVIDER === "cli") {
+  scorer = createCliScorer({
+    model: SCORING_MODEL,
+    timeoutMs: SCORING_TIMEOUT_MS,
+    claudeBin: process.env["CLAUDE_BIN"],
+  });
+} else {
+  anthropic = new Anthropic({
+    apiKey: process.env["ANTHROPIC_API_KEY"]!,
+    maxRetries: 0,
+  });
+}
 
 const dal = getDefaultDal();
 
@@ -63,6 +82,7 @@ async function main(): Promise<void> {
   await runWorker({
     dal,
     anthropic,
+    scorer,
     fetcherFactory: () => createSafeFetcher(),
     concurrency: WORKER_CONCURRENCY,
     pollIntervalMs: POLL_INTERVAL_MS,

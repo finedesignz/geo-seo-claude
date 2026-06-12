@@ -1,10 +1,15 @@
 // @geo/worker — public barrel (wave 0 scaffold)
 
-// Env guard
-export { assertEnv } from "./env.js";
+// Env guard + scoring-provider resolution
+export { assertEnv, resolveScoringProvider } from "./env.js";
+export type { ScoringProvider } from "./env.js";
 
 // Injection seam types
-export type { AnthropicMessagesClient, WorkerOptions } from "./types.js";
+export type { AnthropicMessagesClient, WorkerOptions, Scorer } from "./types.js";
+
+// Claude Code CLI (subscription) scorer
+export { createCliScorer, buildCliArgv, extractCliResult } from "./cli-scorer.js";
+export type { CliScorerOptions, CliSpawnFn, CliSpawnResult } from "./cli-scorer.js";
 
 // wave 1
 export {

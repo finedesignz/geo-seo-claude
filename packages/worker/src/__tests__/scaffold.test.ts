@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { assertEnv } from "../env.js";
+import { assertEnv, resolveScoringProvider } from "../env.js";
 import type { WorkerOptions, AnthropicMessagesClient } from "../types.js";
 import type { AuditDal } from "@geo/db";
 import type { Fetcher } from "@geo/core";
@@ -18,44 +18,71 @@ import type { Fetcher } from "@geo/core";
 // ---------------------------------------------------------------------------
 
 describe("assertEnv", () => {
-  let savedAnthropicKey: string | undefined;
-  let savedDatabaseUrl: string | undefined;
+  const KEYS = [
+    "ANTHROPIC_API_KEY",
+    "DATABASE_URL",
+    "SCORING_PROVIDER",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+  ] as const;
+  const saved: Record<string, string | undefined> = {};
 
   beforeEach(() => {
-    savedAnthropicKey = process.env["ANTHROPIC_API_KEY"];
-    savedDatabaseUrl = process.env["DATABASE_URL"];
+    for (const k of KEYS) saved[k] = process.env[k];
   });
 
   afterEach(() => {
-    // Restore original values
-    if (savedAnthropicKey === undefined) {
-      delete process.env["ANTHROPIC_API_KEY"];
-    } else {
-      process.env["ANTHROPIC_API_KEY"] = savedAnthropicKey;
-    }
-    if (savedDatabaseUrl === undefined) {
-      delete process.env["DATABASE_URL"];
-    } else {
-      process.env["DATABASE_URL"] = savedDatabaseUrl;
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k]!;
     }
   });
 
-  it("throws when ANTHROPIC_API_KEY is missing", () => {
+  it("api provider: throws when ANTHROPIC_API_KEY is missing", () => {
     delete process.env["ANTHROPIC_API_KEY"];
     process.env["DATABASE_URL"] = "postgres://localhost/test";
-    expect(() => assertEnv()).toThrow("ANTHROPIC_API_KEY");
+    expect(() => assertEnv("api")).toThrow("ANTHROPIC_API_KEY");
   });
 
-  it("throws when DATABASE_URL is missing", () => {
+  it("api provider: throws when DATABASE_URL is missing", () => {
     process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
     delete process.env["DATABASE_URL"];
-    expect(() => assertEnv()).toThrow("DATABASE_URL");
+    expect(() => assertEnv("api")).toThrow("DATABASE_URL");
   });
 
-  it("does not throw when both vars are set", () => {
+  it("api provider: does not throw when both vars are set", () => {
     process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
     process.env["DATABASE_URL"] = "postgres://localhost/test";
-    expect(() => assertEnv()).not.toThrow();
+    expect(() => assertEnv("api")).not.toThrow();
+  });
+
+  it("cli provider: does not require ANTHROPIC_API_KEY", () => {
+    delete process.env["ANTHROPIC_API_KEY"];
+    process.env["CLAUDE_CODE_OAUTH_TOKEN"] = "oat-test";
+    process.env["DATABASE_URL"] = "postgres://localhost/test";
+    expect(() => assertEnv("cli")).not.toThrow();
+  });
+
+  it("cli provider: still requires DATABASE_URL", () => {
+    delete process.env["ANTHROPIC_API_KEY"];
+    process.env["CLAUDE_CODE_OAUTH_TOKEN"] = "oat-test";
+    delete process.env["DATABASE_URL"];
+    expect(() => assertEnv("cli")).toThrow("DATABASE_URL");
+  });
+
+  it("resolveScoringProvider: defaults to api with a key, cli without", () => {
+    delete process.env["SCORING_PROVIDER"];
+    process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
+    expect(resolveScoringProvider()).toBe("api");
+    delete process.env["ANTHROPIC_API_KEY"];
+    expect(resolveScoringProvider()).toBe("cli");
+  });
+
+  it("resolveScoringProvider: explicit value wins; bad value throws", () => {
+    process.env["SCORING_PROVIDER"] = "cli";
+    process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
+    expect(resolveScoringProvider()).toBe("cli");
+    process.env["SCORING_PROVIDER"] = "bogus";
+    expect(() => resolveScoringProvider()).toThrow("SCORING_PROVIDER");
   });
 });
 

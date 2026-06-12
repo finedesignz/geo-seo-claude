@@ -40,7 +40,11 @@ export async function runWorker(opts: WorkerOptions): Promise<void> {
   const scheduleInterval = opts.scheduleInterval ?? setInterval;
   const cancelInterval = opts.cancelInterval ?? clearInterval;
 
-  const scorer = createScorer(anthropic, { model: scoringModel, timeoutMs: scoringTimeoutMs });
+  // Use a pre-built scorer (e.g. the Claude Code CLI scorer) when supplied;
+  // otherwise build the API scorer from the injected Anthropic client.
+  const scorer =
+    opts.scorer ??
+    createScorer(anthropic!, { model: scoringModel, timeoutMs: scoringTimeoutMs });
 
   // In-flight set — each entry is a Promise<void> (already .catch'd)
   const inFlight = new Set<Promise<void>>();
