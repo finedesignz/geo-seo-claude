@@ -1,259 +1,352 @@
 ---
-last_mapped_commit: 9eec32f5f700a1e6c3cb1cb735a56ee5ec49a964
+last_mapped_commit: 9af25c25
 focus: concerns
-analysis_date: 2026-06-01
+analysis_date: 2026-07-24
 ---
 
 # Codebase Concerns
 
-**Analysis Date:** 2026-06-01
+**Analysis Date:** 2026-07-24
 
-This is a Python-based GEO/SEO toolkit: a set of Claude Code skills (`skills/`), standalone
-analysis scripts (`scripts/`), a small Flask CRM web UI (`scripts/webapp/`), and a white-label
-config layer (`white-label/`). Concerns below are grounded in the actual code.
+The repo holds **two parallel implementations** of the same GEO/SEO capability:
+
+1. **`packages/` — the TypeScript/Bun v1.0 product** (`@geo/core`, `@geo/fetch`, `@geo/db`,
+   `@geo/api`, `@geo/worker`, `@geo/cron`), deployed as one Docker image with role dispatch.
+2. **`scripts/` + `skills/` — the original Python/Claude-Code-skill toolkit** (standalone
+   analysis scripts plus a small Flask CRM UI at `scripts/webapp/app.py`).
+
+Most concerns below sit at the seam between these two, in the deployment path, or in the two
+newest and least battle-tested surfaces: the Bun fetch/decompression stack and the Claude Code
+CLI subscription scoring path.
 
 ## Tech Debt
 
-**Single shared `requests.get` boilerplate duplicated across scripts:**
-- Issue: `DEFAULT_HEADERS` and the same `requests.get(..., headers=..., timeout=...)` pattern are
-  copy-pasted into every script rather than centralized. The browser User-Agent string is
-  hardcoded in at least four places.
-- Files: `scripts/fetch_page.py` (lines 28-33), `scripts/brand_scanner.py` (lines 28-32),
-  `scripts/citability_scorer.py` (lines 250-256, inline UA), `scripts/llmstxt_generator.py`,
-  `scripts/crm_dashboard.py`.
-- Impact: UA/header/timeout changes must be made in N places; easy to drift (citability_scorer
-  already uses a different/shorter UA than the others).
-- Fix approach: extract a shared `http.py` helper (single `get()` with headers, timeout, retries,
-  size cap, SSRF guard) and import it everywhere.
+**Two implementations of the same domain logic (Python `scripts/` vs TypeScript `packages/`):**
+- Issue: citability scoring, llms.txt generation, robots/sitemap fetching, and page fetching all
+  exist twice — once in Python, once in TypeScript — with no shared spec and no cross-check.
+- Files: `scripts/citability_scorer.py` vs `packages/core/src/citability.ts`;
+  `scripts/llmstxt_generator.py` vs `packages/core/src/llmstxt.ts`;
+  `scripts/fetch_page.py` vs `packages/fetch/src/safe-fetcher.ts` + `packages/core/src/robots.ts`.
+- Impact: scoring drift between the skill path and the API path — the same URL can produce two
+  different scores with no way to tell which is authoritative. Bug fixes land in one side only
+  (the SSRF/size/decompression hardening exists ONLY in `packages/fetch`; the Python
+  `requests.get` paths have none of it).
+- Fix approach: declare `packages/core` the single source of truth, then either (a) reduce the
+  Python scripts to thin clients of the HTTP API (`docs/consumers.md` already documents a Python
+  client), or (b) explicitly freeze and document the Python side as legacy/offline-only.
 
-**Broad `except Exception` / bare `except` swallowing errors silently:**
-- Issue: Many network and parse paths catch `Exception` and either `pass` or append a generic
-  string, discarding the real failure mode.
-- Files: `scripts/brand_scanner.py` (lines 131, 145 — `except Exception: pass`),
-  `scripts/fetch_page.py` (lines 195, 303, 329, 436, 452), `scripts/citability_scorer.py`
-  (line 258), `scripts/llmstxt_generator.py` (lines 116, 124).
-- Impact: real bugs (bad JSON shape, DNS, TLS) are indistinguishable from "site has no data";
-  silent `pass` in `crawl_sitemap` (lines 436, 452) hides child-sitemap fetch failures so results
-  look complete when they are partial.
-- Fix approach: narrow except clauses (`requests.RequestException`, `json.JSONDecodeError`), log
-  the exception type, and surface partial-result flags in the JSON output.
+**Python scripts carry none of the fetch hardening the TS stack has:**
+- Issue: `scripts/*.py` still use raw `requests.get` with a hardcoded browser User-Agent — no
+  SSRF/IP classification, no redirect policy, no response-size cap, no decompression-bomb guard.
+- Files: `scripts/fetch_page.py`, `scripts/brand_scanner.py`, `scripts/citability_scorer.py`,
+  `scripts/llmstxt_generator.py`, `scripts/crm_dashboard.py`.
+- Impact: any Python entry point that accepts a user-supplied URL is an SSRF vector against
+  whatever host runs it, and is unbounded in memory. `packages/fetch` solved all of this.
+- Fix approach: route Python URL fetches through the API, or port the guard set
+  (`packages/fetch/src/ip-validator.ts`, `dns-resolve.ts`, `decompression.ts`) to a shared
+  `scripts/http.py`.
 
-**No dependency pinning to exact versions:**
-- Issue: `requirements.txt` uses floating ranges (`requests>=2.32.4,<3.0.0`, etc.) with no
-  lockfile committed.
+**Broad `except Exception` / bare `except` swallowing errors in the Python scripts:**
+- Issue: network and parse paths catch `Exception` and either `pass` or append a generic string,
+  discarding the real failure mode.
+- Files: `scripts/brand_scanner.py`, `scripts/fetch_page.py` (sitemap crawl paths),
+  `scripts/citability_scorer.py`, `scripts/llmstxt_generator.py`.
+- Impact: real failures (bad JSON shape, DNS, TLS) are indistinguishable from "site has no data";
+  silent `pass` in the sitemap crawl hides child-sitemap fetch failures so partial results look
+  complete.
+- Fix approach: narrow the except clauses (`requests.RequestException`, `json.JSONDecodeError`),
+  log the exception type, and surface a partial-result flag in the JSON output.
+
+**No Python dependency pinning; no lockfile:**
+- Issue: `requirements.txt` uses floating ranges with no lockfile committed. The Bun side is
+  correctly locked (`bun.lock`, `bun install --frozen-lockfile` in the Dockerfile).
 - Files: `requirements.txt`.
-- Impact: non-reproducible installs; a patch release of `lxml`/`beautifulsoup4`/`playwright` can
-  change parse behavior under users without any repo change. `playwright>=1.56` also implies a
-  browser-binary download step that is not version-locked.
-- Fix approach: add a `requirements.lock` / `uv.lock` (project already references `uv` in
-  `install.sh`) and pin transitive deps.
+- Impact: non-reproducible installs on the Python half; a patch release of a parser can change
+  scoring output with no repo change.
+- Fix approach: commit a `requirements.lock` / `uv.lock` (`install.sh` already references `uv`).
+
+**Docker build compiles the six packages as one sequential `RUN` chain:**
+- Issue: `Dockerfile` builds core → fetch → db → api → worker → cron in a single hand-ordered
+  `RUN cd ... && cd ...` chain because parallel builds raced on DTS emit (commit `c40a1ad`).
+- Files: `Dockerfile` (build stage).
+- Impact: build order is manual and unenforced — adding a package or changing a dependency edge
+  silently breaks the build with a confusing type error. No cache granularity: any source change
+  rebuilds all six.
+- Fix approach: adopt a real task runner with a declared dep graph (turbo/nx/`bun --filter`), or
+  at minimum assert the order matches the workspace dependency graph in CI.
+
+**No root-level build/test/lint scripts:**
+- Issue: root `package.json` is `{ private, workspaces }` only — no `build`, `test`, `lint`,
+  `typecheck` script. Every command must be run per package.
+- Files: `package.json`.
+- Impact: no single command proves the repo is green; CI and the Dockerfile each re-encode the
+  package list independently (already drifted once — `examples/package.json` had to be added to
+  two stages in `8b82da6`).
+- Fix approach: add root scripts that fan out over the workspace and have the Dockerfile call them.
 
 ## Known Bugs
 
-**`robots.txt` Sitemap-line parser corrupts URLs with ports or `https`:**
-- Symptoms: `fetch_robots_txt` splits each line on the first `:` (`line.split(":", 1)`), so a
-  `Sitemap: https://...` line yields `https://...` correctly, but the defensive re-prepend logic
-  at `scripts/fetch_page.py` lines 263-264 (`if not sitemap_url.startswith("http"): sitemap_url =
-  "http" + sitemap_url`) will mangle any sitemap value that legitimately does not start with
-  `http` (relative or scheme-less), producing `httpsitemap...`-style garbage.
-- Files: `scripts/fetch_page.py` (lines 260-265).
-- Trigger: a robots.txt with a non-`http` Sitemap directive, or `User-agent`/`Disallow` values
-  containing a `:` (e.g. a path with a colon) — `split(":", 1)` keeps everything after the first
-  colon, which is correct for paths but the directive matching is purely prefix-based and
-  case-handled inconsistently.
-- Workaround: none in code; downstream consumers must re-validate sitemap URLs.
+**Open/recently-closed bug references:** the only in-repo bug marker is `BUG #3` in
+`packages/fetch/src/__tests__/readbody-error.test.ts`, which covers the fix at HEAD (`9af25c2`,
+"contain decompressor errors + avoid Bun brotli crash"). There are no open `TODO`/`FIXME`/`HACK`
+markers anywhere in `packages/*/src` — the two `XXX` hits in `packages/core/src/schema.ts`
+(lines 68, 158) are placeholder literals in generated JSON-LD templates, not defects.
 
-**SSR detection is heuristic and brittle:**
-- Symptoms: `has_ssr_content` is flipped to `False` only when a framework-root div has `<50` chars
-  AND total page words `<200` (`scripts/fetch_page.py` lines 176-189). Pages that are genuinely
-  client-rendered but ship a large static shell, or SSR pages with tiny visible text, are
-  misclassified.
-- Files: `scripts/fetch_page.py` (lines 130-189).
-- Trigger: SPA with prerendered marketing copy, or content-light SSR pages.
-- Workaround: treat `has_ssr_content` as advisory, not authoritative.
-
-**Platform "presence" checks infer existence from search-result HTML / counts:**
-- Symptoms: `brand_scanner.py` decides `has_wikipedia_page` by checking if the brand name is a
-  substring of the top Wikipedia search title (line 125-126), and other platforms are reduced to
-  pre-built `search?q=` URLs rather than verified presence. Substring matching produces false
-  positives (generic brand names) and false negatives (disambiguated titles).
-- Files: `scripts/brand_scanner.py` (lines 110-145, 200-210).
-- Trigger: common/short brand names, or brands whose Wikipedia title differs from the query.
-- Workaround: manual verification; treat output as a lead, not a fact.
+**`robots.txt` Sitemap-line handling in the Python fetcher:**
+- Symptoms: the defensive re-prepend logic (`if not sitemap_url.startswith("http"): sitemap_url =
+  "http" + sitemap_url`) mangles any sitemap value that legitimately does not start with `http`
+  (relative or scheme-less), producing `httpsitemap...`-style garbage.
+- Files: `scripts/fetch_page.py` (robots parsing, ~lines 260-265).
+- Trigger: a robots.txt with a relative or scheme-less `Sitemap:` directive.
+- Workaround: none; the TS equivalent (`packages/core/src/robots.ts`) is unaffected.
 
 ## Security Considerations
 
-**SSRF: no private-network / internal-host validation before fetching:**
-- Risk: `fetch_page` validates only the URL scheme (`http`/`https`, lines 60-63) but never the
-  resolved host. Any caller-supplied URL can target `127.0.0.1`, `169.254.169.254` (cloud
-  metadata), `localhost`, or RFC-1918 ranges. `requests.get(..., allow_redirects=True)` also
-  follows redirects to internal hosts. `crawl_sitemap` recursively fetches arbitrary child-sitemap
-  `loc` URLs taken from remote XML with no validation (lines 418-433).
-- Files: `scripts/fetch_page.py` (lines 60-71, 233, 323, 411-433, 477), `scripts/brand_scanner.py`
-  (lines 121, 137), `scripts/citability_scorer.py` (lines 250-256),
-  `scripts/llmstxt_generator.py` (lines 58, 121, 144, 252).
-- Current mitigation: scheme allow-list only.
-- Recommendations: resolve the hostname and reject private/loopback/link-local/reserved IPs before
-  the request; disable or re-validate on redirect; cap redirect count; apply the same guard to
-  sitemap-discovered URLs.
+**Webhook deliveries are unsigned:**
+- Risk: `deliverWebhook` POSTs audit results to a consumer-supplied `callback_url` with no HMAC
+  signature and no shared secret. A consumer cannot verify the payload came from this service,
+  and cannot distinguish a replay.
+- Files: `packages/worker/src/webhook.ts`.
+- Current mitigation: strong outbound hardening — the SSRF-safe requester re-resolves and
+  IP-classifies the host on every attempt (TOCTOU-safe), refuses redirects, caps the response at
+  64 KiB, 5s timeout, 2 retries, and delivery is non-fatal so failures never wedge a job.
+- Recommendations: add an `X-Geo-Signature` HMAC over the raw body with a per-consumer secret plus
+  a timestamp header, and document verification in `docs/consumers.md`.
 
-**No response-size cap — memory-exhaustion / DoS via large responses:**
-- Risk: every fetch uses `requests.get(...)` without `stream=True` and reads `response.text`
-  fully into memory; a hostile or huge page/sitemap is loaded entirely. `BeautifulSoup(...,
-  "lxml")` then parses the whole blob.
-- Files: `scripts/fetch_page.py` (line 66, 95, 415), `scripts/citability_scorer.py` (line 250),
-  `scripts/brand_scanner.py`, `scripts/llmstxt_generator.py`.
-- Current mitigation: per-request timeout only (does not bound body size).
-- Recommendations: stream with a max-bytes guard; reject `Content-Length` over a threshold.
+**No rate limiting or request-size limit on the HTTP API:**
+- Risk: nothing in `packages/api/src` implements rate limiting or per-consumer quota. An
+  authenticated consumer (or a leaked key) can enqueue unbounded audit jobs, each of which causes
+  outbound fetches and a paid/subscription-billed model call.
+- Files: `packages/api/src/app.ts`, `packages/api/src/routes/audit-post.ts`.
+- Current mitigation: bearer auth is required on every data route and comparison is constant-time
+  (`packages/api/src/middleware/auth.ts`), so this is an authenticated-abuse surface, not an open
+  one.
+- Recommendations: per-`consumer_id` token bucket on `POST /audits`, plus a body-size cap, plus a
+  queue-depth ceiling per consumer.
 
-**Flask CRM has no authentication and is JSON-file backed:**
-- Risk: `scripts/webapp/app.py` exposes dashboard, prospect detail, note add, status update, and
-  PDF download with zero auth. It mutates `~/.geo-prospects/prospects.json` on POST. If bound to
-  anything but loopback it leaks CRM/PII and allows unauthenticated writes.
-- Files: `scripts/webapp/app.py` (all routes; `app.run(debug=debug, port=5050)` line 215 binds
-  default host).
-- Current mitigation: intended for localhost; `FLASK_DEBUG` is env-gated (line 214) so the
-  debugger/PIN is off by default.
-- Recommendations: bind explicitly to `127.0.0.1`; add a note/guard against `0.0.0.0`; if remote
-  access is ever needed, put auth (Titanium licensing per house rules) in front.
+**API keys are a flat env-var string with no rotation or revocation path:**
+- Risk: `GEO_API_KEYS` is a comma-separated `token:consumer_id` list parsed once at startup.
+  Revoking or rotating a key requires an env change and a redeploy; there is no per-key expiry,
+  no last-used audit trail, and keys sit in plaintext in the Coolify env.
+- Files: `packages/api/src/middleware/auth.ts` (`parseApiKeys`).
+- Current mitigation: tokens are hashed to a fixed-length digest and compared with
+  `timingSafeEqual`; the `Authorization` header is never logged; parsing fails fast when the var
+  is missing.
+- Recommendations: move keys into the `consumers` table with a hashed column, expiry, and a
+  revocation flag; keep the env var only as a bootstrap path.
 
-**PDF download path built from prospect-controlled `domain` glob:**
-- Risk: `find_pdf` globs `PROPOSALS_DIR.glob(f"{domain}*.pdf")` using `prospect["domain"]`
-  (`app.py` lines 74-79). The value comes from the JSON store; a crafted `domain` containing glob
-  metacharacters could broaden the match. `send_file` itself is scoped to the matched path, so
-  this is low severity, but the pattern is fragile.
-- Files: `scripts/webapp/app.py` (lines 74-79, 192-208).
-- Current mitigation: matches are confined to `PROPOSALS_DIR`; no user-supplied path traversal
-  reaches `send_file` directly.
-- Recommendations: sanitize/whitelist `domain` characters before globbing.
+**Claude CLI subscription token in the container env:**
+- Risk: `SCORING_PROVIDER=cli` requires `CLAUDE_CODE_OAUTH_TOKEN` (a long-lived subscription
+  token) to be present in the worker container's environment, where it is visible to any process
+  in that container — including the `claude` CLI subprocess and anything the model-driven path
+  could be induced to run.
+- Files: `packages/worker/src/env.ts`, `packages/worker/src/cli-scorer.ts`, `Dockerfile`
+  (runtime stage installs `@anthropic-ai/claude-code`).
+- Current mitigation: the child is spawned with no bypass flags, `ANTHROPIC_API_KEY` is stripped
+  from the child env (so it cannot silently fall back to API billing), the child gets its own
+  process group and is SIGKILLed on timeout or lease-loss abort, and env errors name the variable
+  without echoing its value.
+- Recommendations: scope the token to the worker resource only (api/cron roles carry the CLI
+  binary but do not need the token); treat any prompt content reaching the CLI as untrusted input
+  and keep the prompt strictly templated from validated fields.
 
-**Install-via-pipe pattern:**
-- Risk: `install.sh` / `install-win.sh` explicitly detect "running via curl pipe" (line 24/16),
-  implying a `curl ... | bash` install flow, which executes remote code unverified and runs
-  `pip install` of unpinned deps and `chmod +x` on hook files.
-- Files: `install.sh`, `install-win.sh`, `uninstall.sh`.
-- Current mitigation: none beyond user trust.
-- Recommendations: document checksum/tag verification; encourage download-then-inspect-then-run.
+**Flask CRM UI has no auth and a debug-mode entry point:**
+- Risk: `scripts/webapp/app.py` ends in `app.run(debug=debug, port=5050)`. Run with debug on and
+  bound off-localhost, the Werkzeug debugger is remote code execution. There is no login on the
+  UI at all.
+- Files: `scripts/webapp/app.py` (line 215).
+- Current mitigation: local-only by convention; not part of the Docker image or any deployed role.
+- Recommendations: hard-fail if `debug` is on and the bind host is not loopback; or drop the
+  Flask UI in favor of the API + a consumer client.
 
 ## Performance Bottlenecks
 
-**Serial, blocking network fan-out:**
-- Problem: brand scanning, citability page analysis, and sitemap crawling issue many `requests.get`
-  calls sequentially with 10-30s timeouts each. A multi-platform brand scan or a 50-page sitemap
-  crawl blocks linearly.
-- Files: `scripts/brand_scanner.py` (per-platform checks), `scripts/fetch_page.py`
-  `crawl_sitemap` (lines 398-455, up to `max_pages=50` sequential child fetches),
-  `scripts/llmstxt_generator.py` (line 252 per-page fetch loop).
-- Cause: no concurrency; each call waits on the prior.
-- Improvement path: bounded thread pool / async for the fan-out; reuse a `requests.Session` for
-  connection pooling (currently a fresh connection per call).
+**Model scoring is the dominant per-job cost and has no caching:**
+- Problem: every audit job runs a full model scoring call; identical or near-identical page
+  content is re-scored from scratch.
+- Files: `packages/worker/src/scorer.ts`, `packages/worker/src/cli-scorer.ts`,
+  `packages/worker/src/pipeline.ts`.
+- Cause: no content-hash keyed result cache between fetch and score.
+- Improvement path: hash the normalized extracted content and short-circuit to the previous
+  score when unchanged (a re-audit of an unchanged site should cost zero model calls).
 
-**Full-document re-parse per analysis mode:**
-- Problem: `fetch_page.py` `full` mode (lines 479-485) calls `fetch_page`, `fetch_robots_txt`,
-  `fetch_llms_txt`, and `crawl_sitemap` independently, each re-fetching/re-parsing; the main page
-  may be fetched and BeautifulSoup-parsed more than once across modes.
-- Files: `scripts/fetch_page.py` (lines 458-490), `scripts/citability_scorer.py` (re-fetches the
-  page it analyzes, lines 248-260).
-- Improvement path: fetch once, pass parsed soup/HTML between analyzers.
+**CLI scoring spawns a fresh `claude` process per job:**
+- Problem: `SCORING_PROVIDER=cli` pays full CLI process startup (Node + CLI boot) on every single
+  audit, and holds the job lease for that whole window.
+- Files: `packages/worker/src/cli-scorer.ts`.
+- Cause: one-shot `claude -p ... --output-format stream-json` per score by design.
+- Improvement path: batch several pages per invocation, or keep `SCORING_PROVIDER=api` for
+  high-volume operation and reserve CLI mode for subscription-billed low-volume runs.
 
 ## Fragile Areas
 
-**HTML-structure-dependent scraping of third-party platforms:**
-- Files: `scripts/brand_scanner.py` (Quora/StackOverflow/GitHub/ProductHunt/Trustpilot search
-  URLs, lines 200-210), `scripts/citability_scorer.py`, `scripts/llmstxt_generator.py`.
-- Why fragile: relies on third-party search-page markup and anti-bot tolerance. Any DOM change,
-  rate-limit, captcha, or 403 silently degrades results (swallowed by broad excepts above).
-- Safe modification: prefer official APIs where they exist (Wikipedia/Wikidata already do, lines
-  119-121, 136-137); gate scraped platforms behind explicit "best-effort" flags.
-- Test coverage: none for these paths.
+**Bun's `node:zlib` brotli decoder (the reason for the HEAD fix):**
+- Files: `packages/fetch/src/safe-fetcher.ts` (request headers ~line 247; stream error wiring
+  ~line 444), `packages/fetch/src/decompression.ts`.
+- Why fragile: Bun's baseline `node:zlib` brotli decoder throws
+  `ERR_BROTLI_DECODER_ERROR_FORMAT_RESERVED` on streams Node decodes fine. The code works around
+  it by requesting `accept-encoding: gzip, deflate` only — but `buildDecompressChain` still
+  supports `br`, so an origin that returns brotli regardless still hits the bad decoder. It is
+  contained (every stage has an `error` handler because `.pipe()` does not forward errors, so a
+  mid-chain failure becomes `FETCH_ERROR` instead of an unhandled event that kills the process),
+  but the containment is the only thing between that origin and a crashed worker.
+- Safe modification: never remove a per-stage `error` listener in `readBodyBounded`; never widen
+  `accept-encoding` to include `br` without first re-verifying on the exact pinned Bun patch
+  version; keep the regression test at `packages/fetch/src/__tests__/readbody-error.test.ts`.
+- Test coverage: good for this specific path (`readbody-error.test.ts`, `decompression.test.ts`,
+  `size.test.ts`), but all against synthetic streams — no real-origin brotli fixture.
 
-**SSR/decompose ordering coupling in `fetch_page`:**
-- Files: `scripts/fetch_page.py` (lines 122-189).
-- Why fragile: structured-data extraction, SSR measurement, and `decompose()` are order-dependent
-  (comments at lines 122, 130, 145 warn that measurements must run before the destructive
-  `decompose()`). Reordering silently breaks SSR detection and JSON-LD capture.
-- Safe modification: only the existing `tests/test_fetch_page_ssr.py` (14 tests) guards SSR; extend
-  it before touching this block.
-- Test coverage: SSR path covered; structured-data/links/images paths uncovered.
+**Undici-instead-of-`fetch` IP pinning:**
+- Files: `packages/fetch/src/safe-fetcher.ts` (lines 16-17), `packages/fetch/src/dns-resolve.ts`,
+  `packages/fetch/src/ip-validator.ts`.
+- Why fragile: the whole SSRF guard depends on using undici's `request` with a custom connect
+  `lookup` — Bun's global `fetch` breaks HTTPS with a custom lookup (Bun issue #27890). Anyone
+  "simplifying" this back to `fetch` silently removes IP pinning while all tests still pass
+  against non-TLS mocks.
+- Safe modification: treat "uses undici, not global fetch" as a load-bearing invariant and
+  comment it at every call site; add a test asserting the dispatcher carries a custom lookup.
+- Test coverage: `redirect.test.ts`, `ip-validator.test.ts`, `safe-fetcher.test.ts` — but driven
+  through a `testDispatcher` seam, which is exactly the path that bypasses the pinning.
 
-**White-label config layer:**
-- Files: `white-label/brand_config.py`, `white-label/` configs.
-- Why fragile: report/proposal generation interpolates brand strings; placeholder tokens like
-  `$X,XXX/month` and `XX%` appear directly in skill output templates (`skills/geo-report/SKILL.md`
-  lines 76, 290) and must be filled by the model — if not substituted they ship to clients
-  verbatim.
-- Safe modification: validate that no `$X,XXX` / `XX%` placeholders survive into generated
-  reports.
+**Coolify role dispatch via `GEO_ROLE`:**
+- Files: `scripts/docker-entrypoint.sh`, `Dockerfile`.
+- Why fragile: the original design selected the role by per-resource start command; Coolify 4.1.1
+  ignores start-command overrides for the Dockerfile build pack (commit `c2e1c39`), so the role is
+  now an env var. A resource created without `GEO_ROLE` silently falls through to `api|*)` and
+  starts a second API instead of the worker/cron it was meant to be — with no error, and a
+  healthy-looking container.
+- Safe modification: make the default explicit rather than a fallthrough — require `GEO_ROLE` to
+  be one of the three and exit non-zero on anything else, keeping `api` only for a literal
+  `GEO_ROLE=api` or unset-with-warning. Log the resolved role at startup.
+- Test coverage: none — the entrypoint is a shell script with no test.
+
+**Migrations need a dedicated `max:1` connection:**
+- Files: `packages/db/src/migrate.ts`, `packages/db/src/client.ts`.
+- Why fragile: postgres.js forbids manual `BEGIN` over a pool (commit `11076ef`), so the migration
+  runner must build its own single-connection client. Reusing the shared pool client here
+  reintroduces the failure, and the symptom (a mid-migration error) is far from the cause.
+- Safe modification: keep the migration client construction inside `migrate.ts`; never accept a
+  shared `sql` handle as a parameter.
+- Test coverage: `packages/db/src/__tests__/migrate.test.ts` and `concurrency.test.ts` run against
+  PGlite, not real Postgres — the pool/`BEGIN` interaction that caused the bug is not reproduced.
 
 ## Scaling Limits
 
-**JSON-file persistence with full read-modify-write:**
-- Current capacity: every CRM mutation (`add_note`, `update_status`) does
-  `load_prospects()` → mutate → `save_prospects()` rewriting the entire `prospects.json`
-  (`scripts/webapp/app.py` lines 31-39, 152-189).
-- Limit: no locking — concurrent requests race and can lose writes; O(n) full-file rewrite per
-  edit; in-memory linear `next(... for x in prospects)` lookups by id.
-- Scaling path: move to SQLite/Postgres with row-level updates and a real index if the CRM grows
-  beyond single-user local use.
+**Single-queue, lease-based worker with no visible concurrency knob:**
+- Current capacity: throughput is bounded by (fetch time + model scoring time) per job across
+  however many worker containers are running.
+- Limit: model scoring dominates; CLI mode adds process-spawn cost per job. Scaling is horizontal
+  only (more Coolify worker resources), and each additional worker needs its own env including the
+  subscription token.
+- Scaling path: content-hash caching first (largest win), then in-process concurrency within one
+  worker, then horizontal.
 
-**Sitemap crawl hard-capped at 50 pages:**
-- Current capacity: `crawl_sitemap(max_pages=50)` (`scripts/fetch_page.py` line 398).
-- Limit: large sites are silently truncated; sitemap-index children are only partially walked
-  before the cap.
-- Scaling path: paginate/stream and make the cap explicit in output.
+**Postgres is both the queue and the datastore:**
+- Current capacity: fine at current volume; the queue tests exercise lease/requeue behavior
+  (`packages/db/src/__tests__/queue.test.ts`, `requeue.test.ts`, `lifecycle.test.ts`).
+- Limit: high-frequency lease polling against the same table will contend as worker count grows.
+- Scaling path: `LISTEN/NOTIFY`-driven wakeup instead of polling before reaching for a broker.
 
 ## Dependencies at Risk
 
-**Playwright (heavy, browser-binary coupled):**
-- Risk: `playwright>=1.56.0,<2.0.0` pulls a large runtime and requires a separate browser install
-  step; version skew between the pip package and installed browser breaks rendering.
-- Impact: any JS-rendering analysis path fails on environments where the browser was not installed
-  or is mismatched.
-- Migration plan: ensure `playwright install` is part of setup and pin the browser revision; make
-  Playwright optional/lazy-imported so non-rendering scripts work without it.
+**`oven/bun:1.3.1-slim` pinned base + Bun-specific bugs:**
+- Risk: two separate Bun defects are already worked around in `packages/fetch` (brotli decoder,
+  custom-lookup HTTPS). The pin protects against regression but also means Bun fixes are not
+  picked up, and a future bump must re-validate both workarounds.
+- Impact: a careless base-image bump can either resurrect the crash or leave dead workarounds that
+  suppress brotli for no reason.
+- Migration plan: on any Bun bump, run the fetch package suite first and explicitly re-test a real
+  brotli origin before touching `accept-encoding`.
 
-**`lxml` parser dependency:**
-- Risk: every `BeautifulSoup(..., "lxml")` call hard-depends on the C `lxml` build; wheel
-  availability/ABI issues on some platforms.
-- Impact: total failure of all parsing if `lxml` is unavailable.
-- Migration plan: fall back to the stdlib `html.parser` when `lxml` import fails.
+**Claude Code CLI installed with `ARG CLAUDE_CODE_VERSION=latest`:**
+- Risk: the runtime stage runs `npm install -g @anthropic-ai/claude-code@latest` by default, so
+  the CLI version is whatever exists at build time. The CLI's `stream-json` output format has
+  historically shifted between versions, and `cli-scorer.ts` scans stdout for the
+  `{type:"result",subtype:"success"}` line.
+- Impact: a CLI release that changes that envelope breaks all subscription-mode scoring at the
+  next image build, with no repo change.
+- Migration plan: pin `CLAUDE_CODE_VERSION` to an exact version in the Dockerfile default (the
+  build-arg override already exists) and bump it deliberately.
+
+**NodeSource Node 22 installed via piped `curl | bash` in the image:**
+- Risk: the runtime stage pipes a remote setup script into `bash` as root at build time —
+  unpinned, unverified, and a supply-chain dependency on `deb.nodesource.com`.
+- Impact: build breakage or worse if that endpoint changes; no reproducibility.
+- Migration plan: install Node from a pinned `.deb` with a checksum, or drop Node entirely if the
+  CLI can run under Bun.
 
 ## Missing Critical Features
 
-**No request throttling / politeness controls:**
-- Problem: scrapers send rapid sequential requests to third-party sites with a spoofed desktop
-  User-Agent and no delay, robots respect, or rate limiting.
-- Blocks: safe/ethical operation at scale; risks IP bans that silently zero-out results.
+**No webhook signature contract** — see Security. Consumers currently must trust any POST to their
+callback URL.
 
-**No structured logging or run audit trail:**
-- Problem: scripts `print(json.dumps(...))` results and append error strings into the payload; the
-  Flask app uses default logging. There is no consistent log of what was fetched, when, or why a
-  fetch failed.
-- Blocks: debugging field failures and reproducing client reports.
+**No API rate limiting / quota** — see Security.
+
+**No score-result caching** — see Performance; every re-audit is a full-price model call.
+
+**No unified entrypoint across the Python and TypeScript halves** — a user of the `skills/` path
+gets a different scoring implementation than an API consumer, and nothing reconciles them.
 
 ## Test Coverage Gaps
 
-**Only one test module exists:**
-- What's not tested: everything except SSR detection. `tests/` contains only
-  `test_fetch_page_ssr.py` (14 `test_` functions) plus a results markdown
-  (`agent-readiness-test-results.md`). No tests for `robots.txt`/`llms.txt` parsing, sitemap
-  crawl, `brand_scanner`, `citability_scorer`, `llmstxt_generator`, `crm_dashboard`, or the Flask
-  `webapp`.
-- Files: untested — `scripts/brand_scanner.py`, `scripts/citability_scorer.py`,
-  `scripts/llmstxt_generator.py`, `scripts/crm_dashboard.py`, `scripts/webapp/app.py`,
-  `white-label/brand_config.py`, and the non-SSR branches of `scripts/fetch_page.py`.
-- Risk: parser/scoring regressions and the SSRF/size-cap gaps ship unnoticed; robots/sitemap
-  parsing bugs (above) have no guard.
-- Priority: High for `fetch_page` network/parse helpers and any SSRF/size fix; Medium for scoring
-  scripts; Medium for the Flask CRM.
-
-**No CI:**
-- Problem: no `.github/workflows/` directory; the 14 existing tests are not run automatically on
-  push/PR, and there is no lint/type/security (e.g. `bandit`) gate. Per house rule 21 this repo
-  should also expose `/openapi.json` + `/docs` and ship docs-drift CI — none present.
-- Risk: regressions and security issues land without a gate.
+**`scripts/docker-entrypoint.sh` role dispatch — untested:**
+- What's not tested: the `GEO_ROLE` case statement, including the unset/unknown fallthrough to
+  `api`.
+- Files: `scripts/docker-entrypoint.sh`.
+- Risk: a misconfigured Coolify resource silently runs the wrong role and looks healthy — exactly
+  the class of failure that produced commits `c2e1c39`, `880ef81`, `6d5ff5a`.
 - Priority: High.
+
+**Real-Postgres behavior — only PGlite is exercised:**
+- What's not tested: pool semantics, advisory locks under real concurrency, and the manual-`BEGIN`
+  restriction that caused `11076ef`.
+- Files: `packages/db/src/__tests__/*` (all via `pglite-executor.ts`),
+  `packages/api/src/__tests__/pglite-helper.ts`.
+- Risk: DB bugs only reproduce in production.
+- Priority: High.
+
+**The Python half is effectively untested:**
+- What's not tested: everything except SSR fetch — one test file exists
+  (`tests/test_fetch_page_ssr.py`) for ~1,700 lines of Python across five scripts plus the Flask
+  app.
+- Files: `scripts/citability_scorer.py`, `scripts/brand_scanner.py`,
+  `scripts/llmstxt_generator.py`, `scripts/crm_dashboard.py`, `scripts/webapp/app.py`.
+- Risk: silent scoring drift from the TypeScript implementation, unnoticed.
+- Priority: Medium (High if the Python path stays user-facing).
+
+**CLI scoring is tested only through the injected spawn seam:**
+- What's not tested: the real `claude` subprocess — actual `stream-json` envelope parsing against
+  a live CLI version, process-group kill on POSIX, and the Windows kill fallback.
+- Files: `packages/worker/src/cli-scorer.ts`, `packages/worker/src/__tests__/cli-scorer.test.ts`.
+- Risk: a CLI output-format change passes CI and fails only in production.
+- Priority: High (compounded by the unpinned `CLAUDE_CODE_VERSION`).
+
+**No end-to-end deploy smoke test in-repo:**
+- What's not tested: the three roles actually starting from the built image and reaching a healthy
+  state; `scripts/deploy-verify.sh` and `scripts/worker-healthcheck.sh` exist but are not wired
+  into any automated gate.
+- Files: `scripts/deploy-verify.sh`, `scripts/worker-healthcheck.sh`, `Dockerfile`.
+- Risk: the last five commits before HEAD were all deploy-only fixes (`wget`, `curl`, DTS race,
+  `examples/package.json`, role dispatch) — each found in production, none catchable by the unit
+  suites.
+- Priority: High.
+
+## Deployment Risk
+
+The deployment path is the least-covered and most-recently-broken part of this repo. Five of the
+last ten commits are Docker/Coolify fixes discovered only at deploy time. The specific risks:
+
+- Role selection is a silent-fallthrough env var (`GEO_ROLE`) on a platform that ignores
+  start-command overrides.
+- Build order is a hand-maintained `RUN` chain with a known DTS race behind it.
+- Health checks depend on `curl`/`wget` being present in a slim image — twice fixed by hand.
+- Migrations run as a separate pre-deploy one-shot with their own connection rules.
+- The runtime image pulls two unpinned remote artifacts at build time (NodeSource script,
+  `claude-code@latest`).
+
+Any change to `Dockerfile` or `scripts/docker-entrypoint.sh` should be gated on an actual image
+build plus a three-role start smoke test, not on the unit suites.
 
 ---
 
-*Concerns audit: 2026-06-01*
+*Concerns audit: 2026-07-24*

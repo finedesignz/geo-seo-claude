@@ -1,175 +1,189 @@
-<!--
----
-last_mapped_commit: 9eec32f5f700a1e6c3cb1cb735a56ee5ec49a964
-refreshed: 2026-06-01
----
--->
 # Codebase Structure
 
-**Analysis Date:** 2026-06-01
+**Analysis Date:** 2026-07-24
 
 ## Directory Layout
 
-```text
+```
 geo-seo-claude/
-├── geo/                       # Orchestrator skill (entry point)
-│   └── SKILL.md               # Command routing + audit orchestration
-├── skills/                    # 15 specialized sub-skills (one dir per command)
-│   ├── geo-audit/SKILL.md
-│   ├── geo-citability/SKILL.md
-│   ├── geo-brand-mentions/SKILL.md
-│   ├── geo-crawlers/SKILL.md
-│   ├── geo-llmstxt/SKILL.md
-│   ├── geo-platform-optimizer/SKILL.md
-│   ├── geo-schema/SKILL.md
-│   ├── geo-technical/SKILL.md
-│   ├── geo-content/SKILL.md
-│   ├── geo-report/SKILL.md
-│   ├── geo-report-pdf/SKILL.md
-│   ├── geo-prospect/SKILL.md
-│   ├── geo-proposal/SKILL.md
-│   ├── geo-compare/SKILL.md
-│   └── geo-update/SKILL.md
-├── agents/                    # 5 parallel audit subagents
-│   ├── geo-ai-visibility.md
-│   ├── geo-platform-analysis.md
-│   ├── geo-technical.md
-│   ├── geo-content.md
-│   └── geo-schema.md
-├── scripts/                   # Python tool layer
-│   ├── fetch_page.py          # HTTP fetch + parse (490 lines)
-│   ├── citability_scorer.py   # AI citation scoring (343)
-│   ├── brand_scanner.py       # Brand mention scan (276)
-│   ├── llmstxt_generator.py   # llms.txt validate/generate (294)
-│   ├── crm_dashboard.py       # Rich CLI CRM view (336)
-│   └── webapp/                # Flask + HTMX CRM UI
-│       ├── app.py             # Flask app, localhost:5050 (215)
-│       └── templates/         # base/dashboard/prospect.html
-├── schema/                    # JSON-LD templates by business type
-│   ├── organization.json  local-business.json  article-author.json
-│   ├── software-saas.json  product-ecommerce.json  website-searchaction.json
-├── templates/                 # Report rendering
-│   ├── geo-report-template.html
-│   └── geo-report-style.css
-├── white-label/               # Agency branding overrides
-│   ├── brand_config.py  brand.example.json  README.md
-├── tests/                     # Test artifacts
-│   ├── test_fetch_page_ssr.py
-│   └── agent-readiness-test-results.md
-├── docs/                      # Project documentation
-│   ├── architecture.md  commands-reference.md  scoring-methodology.md
-│   ├── getting-started.md  faq.md  skills-and-agents.md  README.md
-├── examples/                  # Sample audit/report/proposal outputs
-├── assets/                    # Images / static media
-├── install.sh                 # Unix installer (isolated venv)
-├── install-win.sh             # Windows installer
-├── uninstall.sh               # Uninstaller
-├── requirements.txt           # Python deps
-├── README.md  CONTRIBUTING.md  LICENSE
+├── packages/               # Bun workspace — the deployable TypeScript service
+│   ├── core/               # @geo/core — pure deterministic GEO checks
+│   ├── fetch/              # @geo/fetch — SSRF-safe HTTP + decompression
+│   ├── db/                 # @geo/db — Postgres DAL, queue, migrations
+│   ├── api/                # @geo/api — Bun.serve + OpenAPIHono HTTP surface
+│   ├── worker/             # @geo/worker — queue consumer + scoring
+│   └── cron/               # @geo/cron — one-shot scheduled re-audit batch
+├── geo/                    # SKILL.md — the Claude Code skill entry point
+├── skills/                 # 15 geo-* subskills (Markdown SOPs)
+├── agents/                 # 5 subagent definitions (Markdown)
+├── schema/                 # JSON-LD schema templates (6 types)
+├── templates/              # HTML + CSS report templates
+├── white-label/            # Brand config for rebranded reports
+├── scripts/                # Python analysis helpers + ops shell scripts
+│   └── webapp/             # Flask-style CRM dashboard + templates
+├── examples/               # Workspace member — sample outputs + inline-usage test
+├── tests/                  # Python/manual test artifacts
+├── docs/                   # Published docs (architecture, deploy, methodology)
+├── assets/
+├── Dockerfile              # Single multi-stage image, role via GEO_ROLE
+├── package.json            # Root workspace manifest (private, no scripts)
+└── bun.lock
 ```
 
 ## Directory Purposes
 
-**`geo/`:**
-- Purpose: the single top-level skill that Claude loads first
-- Contains: `SKILL.md` with the command table and audit orchestration logic
-- Key files: `geo/SKILL.md`
+**`packages/core`:**
+- Purpose: pure GEO analysis — no I/O except an injected `Fetcher`.
+- Key files: `src/citability.ts`, `src/robots.ts`, `src/rendering.ts`,
+  `src/schema.ts`, `src/llmstxt.ts`, `src/url.ts`, `src/types.ts`.
+- Also holds `fixtures/` for deterministic check tests.
 
-**`skills/`:**
-- Purpose: one sub-skill per `/geo` subcommand
-- Contains: 15 subdirs, each with exactly one `SKILL.md`
-- Key files: `skills/geo-audit/SKILL.md` (largest orchestration), `skills/geo-technical/SKILL.md` (532 lines)
+**`packages/fetch`:**
+- Purpose: hardened outbound HTTP.
+- Key files: `src/safe-fetcher.ts` (GET, 485 lines), `src/safe-requester.ts` (POST),
+  `src/decompression.ts`, `src/dns-resolve.ts`, `src/ip-validator.ts`, `src/errors.ts`.
+- `test/helpers/` holds network fixtures separate from `src/__tests__/`.
 
-**`agents/`:**
-- Purpose: parallel analysis personas for full audits
-- Contains: 5 flat `.md` files
-- Key files: `agents/geo-ai-visibility.md`, `agents/geo-technical.md`
+**`packages/db`:**
+- Purpose: persistence + queue semantics.
+- Key files: `src/dal.ts` (`createAuditDal`, `makePgExecutor`, `getDefaultDal`),
+  `src/client.ts`, `src/migrate.ts`, `src/types.ts`.
+- `migrations/` holds numbered SQL (`0001_create_audits.sql`,
+  `0002_add_consumer_id.sql`); `scripts/migrate.ts` is the runnable entry.
 
-**`scripts/`:**
-- Purpose: deterministic Python CLI tools invoked by skills/agents
-- Contains: 5 top-level scripts + `webapp/` Flask app
-- Key files: `scripts/fetch_page.py`, `scripts/citability_scorer.py`
+**`packages/api`:**
+- Purpose: HTTP contract.
+- Key files: `src/app.ts` (factory), `src/main.ts` (Bun.serve entry),
+  `src/middleware/auth.ts`, `src/routes/{audit-post,audit-get,audits-list,healthz}.ts`.
+
+**`packages/worker`:**
+- Purpose: consume the queue and produce scores.
+- Key files: `src/worker.ts` (loop), `src/pipeline.ts` (`runAudit`),
+  `src/scorer.ts` (API provider), `src/cli-scorer.ts` (Claude Code CLI provider),
+  `src/webhook.ts`, `src/env.ts`, `src/main.ts`.
+
+**`packages/cron`:**
+- Purpose: scheduled re-audit batch.
+- Key files: `src/cron.ts`, `src/env.ts`, `src/main.ts`.
+
+**`geo/`, `skills/`, `agents/`:**
+- Purpose: the Claude Code skill surface. `geo/SKILL.md` is the single declared
+  skill (frontmatter `name: geo`); it routes to `skills/geo-<capability>/` SOPs and
+  `agents/geo-*.md` subagents. Markdown only — no executable code.
 
 **`schema/`, `templates/`, `white-label/`:**
-- Purpose: static assets (JSON-LD, report HTML/CSS, branding)
+- Purpose: output assets. `schema/*.json` are JSON-LD starting points
+  (`local-business`, `organization`, `article-author`, `product-ecommerce`,
+  `software-saas`, `website-searchaction`); `templates/geo-report-template.html` +
+  `geo-report-style.css` render client reports; `white-label/brand_config.py` +
+  `brand.example.json` swap branding.
 
-**`docs/`:**
-- Purpose: human-facing documentation; `docs/architecture.md` and `docs/scoring-methodology.md` are authoritative references
+**`scripts/`:**
+- Purpose: two unrelated groups. Python helpers used by the skill
+  (`citability_scorer.py`, `brand_scanner.py`, `fetch_page.py`,
+  `llmstxt_generator.py`, `crm_dashboard.py` + `webapp/`) and ops shell scripts for
+  the container (`docker-entrypoint.sh`, `worker-healthcheck.sh`, `deploy-verify.sh`).
 
 ## Key File Locations
 
 **Entry Points:**
-- `geo/SKILL.md`: orchestrator / command router
-- `install.sh`, `install-win.sh`: installers (create `~/.claude/skills/geo/.venv`)
-- `scripts/webapp/app.py`: Flask CRM UI (`localhost:5050`)
+- `packages/api/src/main.ts`: HTTP server (PORT default 8080).
+- `packages/worker/src/main.ts`: long-lived worker.
+- `packages/cron/src/main.ts`: one-shot cron.
+- `packages/db/scripts/migrate.ts`: migration runner.
+- `scripts/docker-entrypoint.sh`: `GEO_ROLE` dispatch to the above.
+- `geo/SKILL.md`: Claude Code skill.
 
 **Configuration:**
-- `requirements.txt`: Python dependencies
-- `white-label/brand.example.json`: branding template (copy to `brand.json`)
+- `package.json`: root workspace (`packages/*`, `examples`).
+- `packages/*/package.json`: per-package tsup build + vitest scripts.
+- `Dockerfile`: pinned `oven/bun:1.3.1-slim`, deps/build/runtime stages.
+- `examples/vitest.config.ts`.
 
 **Core Logic:**
-- `geo/SKILL.md`: orchestration
-- `skills/geo-*/SKILL.md`: per-command logic
-- `scripts/*.py`: computation
+- `packages/worker/src/pipeline.ts`: the audit orchestration.
+- `packages/db/src/dal.ts`: queue semantics.
+- `packages/fetch/src/safe-fetcher.ts`: the security boundary.
 
 **Testing:**
-- `tests/test_fetch_page_ssr.py`: pytest for fetcher SSR detection
-- `tests/agent-readiness-test-results.md`: recorded agent test results
+- `packages/<pkg>/src/__tests__/*.test.ts` (co-located per package).
+- `packages/db/src/__tests__/harness.ts` + `pglite-executor.ts`: PGlite harness.
+- `packages/api/src/__tests__/pglite-helper.ts`.
 
 ## Naming Conventions
 
 **Files:**
-- Skills/agents: lowercase `geo-<topic>` kebab-case, command-aligned (`geo-citability`, `geo-report-pdf`)
-- Python scripts: `snake_case.py` (`fetch_page.py`, `crm_dashboard.py`)
-- JSON-LD schemas: `kebab-case.json` named by business type (`local-business.json`)
+- kebab-case TypeScript modules: `safe-fetcher.ts`, `audit-post.ts`, `cli-scorer.ts`.
+- Tests mirror the module name: `<module>.test.ts` in `__tests__/`.
+- Migrations: `NNNN_snake_case_description.sql`.
+- Skill dirs: `geo-<capability>/`; agent files: `geo-<domain>.md`.
+- Python helpers: `snake_case.py`.
 
 **Directories:**
-- One skill = one directory under `skills/` named `geo-<command>`
-- Each contains a single `SKILL.md`
-
-**Skill frontmatter:**
-- YAML block with `name`, `description`, `allowed-tools` (e.g. `geo/SKILL.md`)
+- Packages are bare capability names (`core`, `fetch`, `db`) published as `@geo/<name>`.
+- Each package: `src/`, `src/__tests__/`, `dist/` (built, gitignored), optional
+  `scripts/`, `fixtures/`, `migrations/`.
 
 ## Where to Add New Code
 
-**New `/geo` subcommand:**
-- Create `skills/geo-<command>/SKILL.md` with YAML frontmatter
-- Register it in the command table in `geo/SKILL.md`
+**New deterministic GEO check:**
+- Implementation: `packages/core/src/<check>.ts`, re-exported from
+  `packages/core/src/index.ts`.
+- Fixtures: `packages/core/fixtures/`.
+- Tests: `packages/core/src/__tests__/<check>.test.ts`.
+- Wire into `packages/worker/src/pipeline.ts` and extend `FindingsShape` in
+  `packages/db/src/types.ts`.
 
-**New analysis dimension in full audit:**
-- Add an agent file `agents/geo-<dimension>.md`
-- Wire it into the parallel-analysis phase in `geo/SKILL.md` and `skills/geo-audit/SKILL.md`
+**New API endpoint:**
+- Route module: `packages/api/src/routes/<verb-noun>.ts` exporting
+  `register<Name>(app, deps)`.
+- Register it in `packages/api/src/app.ts` so it lands in the OpenAPI registry.
+- Tests: `packages/api/src/__tests__/<verb-noun>.test.ts` using the PGlite helper.
 
-**New deterministic tool:**
-- Add `scripts/<name>.py` as a standalone CLI (argv/stdin in, JSON out)
-- Include the `try/except ImportError` deps guard pattern
-- Reference it from the relevant `SKILL.md` using `~/.claude/skills/geo/.venv/bin/python3`
-- Add any new dep to `requirements.txt`
+**Schema change:**
+- New numbered SQL in `packages/db/migrations/` (never edit an applied file).
+- Update `packages/db/src/types.ts` and the affected `dal.ts` queries.
+- Tests: `packages/db/src/__tests__/schema.test.ts`.
 
-**New JSON-LD schema:**
-- Add `schema/<business-type>.json`; reference from `skills/geo-schema/SKILL.md`
+**New scoring provider:**
+- `packages/worker/src/<name>-scorer.ts` returning the same `.score()` shape as
+  `createScorer`; add the branch in `resolveScoringProvider`
+  (`packages/worker/src/env.ts`) and the wiring in `packages/worker/src/main.ts`.
 
-**New report styling:**
-- Edit `templates/geo-report-template.html` / `templates/geo-report-style.css`
+**New container role:**
+- New package under `packages/` emitting `dist/main.js`, a build line in the
+  `Dockerfile` build stage, and a `case` branch in `scripts/docker-entrypoint.sh`.
 
-**Tests:**
-- Add `tests/test_<module>.py` (pytest)
+**New skill capability:**
+- `skills/geo-<capability>/SKILL.md`, referenced from `geo/SKILL.md`; any
+  deterministic helper goes in `scripts/<name>.py`.
+
+**Shared helpers:**
+- Cross-package pure utilities belong in `packages/core/src/`; HTTP-adjacent
+  helpers in `packages/fetch/src/`. There is no `utils/` catch-all — do not add one.
 
 ## Special Directories
 
-**`~/.geo-prospects/` (user home, not in repo):**
-- Purpose: CRM data store — `prospects.json`, `audits/`, `proposals/`
-- Generated: Yes (at runtime by prospect/proposal skills + Flask app)
-- Committed: No
-
-**`~/.claude/skills/geo/.venv/` (install target):**
-- Purpose: isolated Python environment created by `install.sh`
-- Generated: Yes · Committed: No
+**`packages/*/dist/`:**
+- Purpose: tsup output (`main.js` per package), consumed by the Docker runtime stage.
+- Generated: Yes. Committed: No.
 
 **`examples/`:**
-- Purpose: committed sample outputs (PDF report, audit JSON, proposal, demo prospects)
-- Generated: No (hand-committed reference artifacts) · Committed: Yes
+- Purpose: a real workspace member holding sample outputs (audit JSON, proposal MD,
+  a generated PDF) plus `how-inline-usage.ts` and its test. Contains
+  `__pycache__/` from the Python client.
+- Generated: Partly. Committed: Yes.
+
+**`tests/`:**
+- Purpose: Python/manual artifacts (`test_fetch_page_ssr.py`,
+  `agent-readiness-test-results.md`). NOT the TypeScript test location — those are
+  co-located under each package.
+
+**`docs/`:**
+- Purpose: published docs contract (`architecture.md`, `deploy.md`, `consumers.md`,
+  `scoring-methodology.md`, `commands-reference.md`, `skills-and-agents.md`).
+- Committed: Yes; keep in sync when behavior changes.
 
 ---
 
-*Structure analysis: 2026-06-01*
+*Structure analysis: 2026-07-24*

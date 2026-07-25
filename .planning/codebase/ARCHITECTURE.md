@@ -1,204 +1,298 @@
-<!--
----
-last_mapped_commit: 9eec32f5f700a1e6c3cb1cb735a56ee5ec49a964
-refreshed: 2026-06-01
----
--->
-<!-- refreshed: 2026-06-01 -->
+<!-- refreshed: 2026-07-24 -->
 # Architecture
 
-**Analysis Date:** 2026-06-01
+**Analysis Date:** 2026-07-24
 
 ## System Overview
 
-This is **not a conventional application** — it is a **Claude Code Skill package**. The "runtime" is Claude itself: markdown skill/agent files are prompts that instruct Claude how to orchestrate analysis, and Python scripts are deterministic tools Claude shells out to. There is no long-running server (except an optional Flask CRM UI).
-
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│                     Claude Code (runtime)                    │
-│   User types: /geo audit <url>, /geo report <url>, etc.      │
-└───────────────────────────┬─────────────────────────────────┘
-                            │ reads + follows
-                            ▼
+│  Consumers                                                   │
+├──────────────────┬──────────────────┬───────────────────────┤
+│  Claude Code     │  HTTP clients    │  Scheduled re-audit   │
+│  skill/agents    │  (Bearer token)  │  (Coolify cron)       │
+│  `geo/SKILL.md`  │                  │  `packages/cron`      │
+└────────┬─────────┴────────┬─────────┴──────────┬────────────┘
+         │  (Python scripts)│  POST /audit        │  POST /audit
+         ▼                  ▼                     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                Orchestrator Skill (prompt layer)             │
-│                       `geo/SKILL.md`                         │
-│   Command routing table + audit orchestration logic          │
-└──────┬───────────────────────────────────┬──────────────────┘
-       │ delegates (parallel)               │ invokes (per command)
-       ▼                                    ▼
-┌──────────────────────────┐   ┌───────────────────────────────┐
-│   Subagents (5)          │   │   Sub-skills (15)             │
-│   `agents/*.md`          │   │   `skills/geo-*/SKILL.md`     │
-│   Parallel analysis      │   │   One per /geo subcommand     │
-└──────────┬───────────────┘   └───────────────┬───────────────┘
-           │ shell out to                       │ shell out to
-           ▼                                    ▼
+│  @geo/api — Bun.serve + OpenAPIHono                          │
+│  `packages/api/src/app.ts`, `routes/`, `middleware/auth.ts`  │
+│  Enqueue-only. Never scores inline.                          │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ audits table = job queue
+                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              Python tool layer (deterministic)               │
-│  `scripts/fetch_page.py` `scripts/citability_scorer.py`      │
-│  `scripts/brand_scanner.py` `scripts/llmstxt_generator.py`   │
-│  `scripts/crm_dashboard.py` `scripts/webapp/app.py`          │
-└──────────┬──────────────────────────────────┬───────────────┘
-           │ reads                              │ writes
-           ▼                                    ▼
-┌──────────────────────────┐   ┌───────────────────────────────┐
-│  Static assets            │   │  User data store              │
-│  `schema/*.json`          │   │  `~/.geo-prospects/`          │
-│  `templates/*.html,.css`  │   │  prospects.json, audits/,     │
-│                           │   │  proposals/                   │
-└──────────────────────────┘   └───────────────────────────────┘
+│  @geo/db — DAL over Postgres (SKIP LOCKED lease queue)        │
+│  `packages/db/src/dal.ts`, `packages/db/migrations/*.sql`    │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ claimJob / renewLease / completeJob
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  @geo/worker — poll loop → runAudit pipeline                  │
+│  `packages/worker/src/worker.ts` → `pipeline.ts`             │
+└──────┬───────────────────────┬──────────────────┬───────────┘
+       │ fetch                 │ deterministic    │ score
+       ▼                       ▼                  ▼
+┌──────────────┐   ┌────────────────────┐  ┌──────────────────────┐
+│ @geo/fetch   │   │ @geo/core          │  │ scorer.ts (API)      │
+│ SSRF-safe    │   │ pure checks:       │  │  OR                  │
+│ fetch +      │   │ robots/rendering/  │  │ cli-scorer.ts        │
+│ decompress   │   │ citability/schema/ │  │ (Claude Code CLI,    │
+│              │   │ llmstxt            │  │  subscription auth)  │
+└──────────────┘   └────────────────────┘  └──────────────────────┘
+                          │
+                          ▼
+              webhook.ts → consumer callback_url (SSRF-safe POST)
 ```
 
 ## Component Responsibilities
 
 | Component | Responsibility | File |
 |-----------|----------------|------|
-| Orchestrator skill | Command routing, audit phase orchestration, score synthesis | `geo/SKILL.md` |
-| Sub-skills (15) | Per-command instructions (audit, citability, schema, report, etc.) | `skills/geo-*/SKILL.md` |
-| Subagents (5) | Parallel analysis personas spawned during full audit | `agents/*.md` |
-| Page fetcher | HTTP fetch + HTML/meta/structured-data parse, AI-crawler UA tests | `scripts/fetch_page.py` |
-| Citability scorer | Score passages 0-100 for AI citation readiness | `scripts/citability_scorer.py` |
-| Brand scanner | Detect brand mentions across AI-cited platforms | `scripts/brand_scanner.py` |
-| llms.txt tool | Validate / generate `llms.txt` | `scripts/llmstxt_generator.py` |
-| CRM dashboard (CLI) | Rich-rendered prospect pipeline view | `scripts/crm_dashboard.py` |
-| CRM web UI | Flask + HTMX prospect/proposal browser | `scripts/webapp/app.py` |
-| JSON-LD templates | Schema markup boilerplate by business type | `schema/*.json` |
-| Report templates | HTML/CSS for client-ready GEO reports | `templates/geo-report-*` |
-| White-label config | Agency branding overrides | `white-label/brand_config.py` |
+| API app factory | Route registration, OpenAPI registry, `/docs` + `/openapi.json` | `packages/api/src/app.ts` |
+| Bearer auth | `GEO_API_KEYS` token → `consumer_id` context var | `packages/api/src/middleware/auth.ts` |
+| Submit route | Validate `url` + `callback_url` (SSRF), enqueue job | `packages/api/src/routes/audit-post.ts` |
+| Poll route | Fetch one audit scoped to consumer | `packages/api/src/routes/audit-get.ts` |
+| History route | Paginated list per consumer | `packages/api/src/routes/audits-list.ts` |
+| Health | Liveness/readiness probe | `packages/api/src/routes/healthz.ts` |
+| DAL | Queue ops (claim/renew/complete/fail/requeue/reclaim) + CRUD | `packages/db/src/dal.ts` |
+| Migrations | Advisory-locked idempotent SQL runner | `packages/db/src/migrate.ts`, `packages/db/migrations/` |
+| Deterministic checks | robots, rendering, citability, schema, llms.txt | `packages/core/src/*.ts` |
+| SSRF-safe fetch | DNS pinning, IP validation, redirect re-validation, size caps | `packages/fetch/src/safe-fetcher.ts` |
+| Decompression | gzip/deflate/br chain + byte-counting bomb guard | `packages/fetch/src/decompression.ts` |
+| Worker loop | Bounded concurrency, reclaim sweep, SIGTERM drain | `packages/worker/src/worker.ts` |
+| Audit pipeline | fetch → core checks → score → completeJob | `packages/worker/src/pipeline.ts` |
+| API scorer | One forced-tool-use Anthropic call, `maxRetries:0` | `packages/worker/src/scorer.ts` |
+| CLI scorer | Spawns `claude -p ... --output-format stream-json` | `packages/worker/src/cli-scorer.ts` |
+| Webhook | Non-fatal SSRF-safe POST to `callback_url` | `packages/worker/src/webhook.ts` |
+| Cron | One-shot batch of `POST /audit` per configured URL | `packages/cron/src/cron.ts` |
+| Role dispatch | `GEO_ROLE` → api / worker / cron | `scripts/docker-entrypoint.sh` |
+| Skill surface | Claude Code skill + subskills + subagents | `geo/SKILL.md`, `skills/`, `agents/` |
 
 ## Pattern Overview
 
-**Overall:** Prompt-orchestrated tool pipeline (LLM-as-orchestrator + deterministic CLI tools). Mirrors the WAT pattern: probabilistic agents reason, deterministic scripts execute.
+**Overall:** Bun/TypeScript monorepo — layered packages behind a Postgres-backed
+job queue, plus a parallel Markdown/Python "skill" surface for interactive use.
 
 **Key Characteristics:**
-- Markdown files (`SKILL.md`, `agents/*.md`) are the control flow — they are prompts, not code.
-- Python scripts are pure stdin/argv → stdout-JSON tools, stateless and independently runnable.
-- Fan-out/fan-in: full audit spawns 5 subagents in parallel, then synthesizes one composite GEO Score (0-100).
-- No framework, no DI, no class hierarchy — flat scripts + flat skill tree.
+- **Deterministic core, probabilistic edge.** All measurement in `@geo/core` is
+  pure and testable; only the final score narrative goes to a model.
+- **Enqueue/poll split.** The API never fetches or scores in the request path; it
+  writes a row and returns a `job_id`.
+- **Dependency injection everywhere.** No module-level singletons except the lazy
+  `getDefaultDal()`; every package exports a factory taking its deps.
+- **One image, many roles.** A single Docker build serves api/worker/cron via `GEO_ROLE`.
 
 ## Layers
 
-**Prompt / orchestration layer:**
-- Purpose: route commands and drive multi-phase audit
-- Location: `geo/SKILL.md`, `skills/geo-*/SKILL.md`, `agents/*.md`
-- Contains: markdown instructions, command tables, orchestration phases
-- Depends on: Claude's tool capabilities (Read, Grep, Glob, Bash, WebFetch, Write)
-- Used by: Claude Code at invocation time
+**Interface layer (`packages/api`):**
+- Purpose: HTTP contract, auth, validation, OpenAPI docs.
+- Location: `packages/api/src/`
+- Depends on: `@geo/db` (DAL), `@geo/fetch` (URL validation only).
+- Used by: external consumers, `packages/cron`.
 
-**Tool layer:**
-- Purpose: deterministic fetching, scoring, generation, persistence
-- Location: `scripts/*.py`, `scripts/webapp/`
-- Contains: standalone Python CLIs (argparse / argv / stdin), Flask app
-- Depends on: `requirements.txt` libs (requests, beautifulsoup4, lxml, playwright, Pillow, flask, rich, validators)
-- Used by: skills/agents via Bash; users directly via CLI
+**Domain layer (`packages/core`):**
+- Purpose: pure GEO analysis primitives; zero I/O beyond an injected `Fetcher`.
+- Location: `packages/core/src/`
+- Depends on: nothing internal.
+- Used by: `packages/worker`.
 
-**Asset layer:**
-- Purpose: reusable static inputs and report scaffolding
-- Location: `schema/*.json`, `templates/`, `white-label/brand.example.json`
-- Used by: schema/report sub-skills and the PDF/HTML report generators
+**Transport layer (`packages/fetch`):**
+- Purpose: hardened outbound HTTP (SSRF, redirects, size, decompression).
+- Location: `packages/fetch/src/`
+- Used by: `packages/api` (validation), `packages/worker` (page fetch + webhook).
 
-**Data layer (user-local):**
-- Purpose: CRM persistence
-- Location: `~/.geo-prospects/` (`prospects.json`, `audits/`, `proposals/`)
-- Accessed by: `scripts/webapp/app.py`, `scripts/crm_dashboard.py`, the prospect/proposal/compare skills
+**Persistence layer (`packages/db`):**
+- Purpose: schema, migrations, `AuditDal` queue + CRUD.
+- Location: `packages/db/src/`
+- Used by: api, worker, cron tests.
+
+**Execution layer (`packages/worker`, `packages/cron`):**
+- Purpose: consume the queue; schedule re-audits.
+
+**Skill layer (`geo/`, `skills/`, `agents/`, `scripts/*.py`, `templates/`, `schema/`, `white-label/`):**
+- Purpose: interactive Claude Code usage — Markdown SOPs + deterministic Python
+  helpers. Independent of the TypeScript service; shares only the methodology.
 
 ## Data Flow
 
-### Primary Request Path — Full Audit (`/geo audit <url>`)
+### Primary Request Path (async audit)
 
-1. User invokes `/geo audit <url>` → Claude loads `geo/SKILL.md` (`geo/SKILL.md`)
-2. **Discovery (sequential):** fetch homepage, detect business type, crawl sitemap via `scripts/fetch_page.py`
-3. **Parallel analysis:** spawn 5 subagents — `agents/geo-ai-visibility.md`, `agents/geo-platform-analysis.md`, `agents/geo-technical.md`, `agents/geo-content.md`, `agents/geo-schema.md`
-4. Each subagent shells out to `scripts/*.py` (e.g. `scripts/citability_scorer.py`, `scripts/brand_scanner.py`) returning JSON
-5. **Synthesis:** orchestrator aggregates sub-scores into a composite GEO Score (0-100) per `docs/scoring-methodology.md`
-6. **Output:** report rendered via `templates/geo-report-template.html` / PDF (`skills/geo-report-pdf/SKILL.md`)
+1. `POST /audit` with `Authorization: Bearer <token>` (`packages/api/src/routes/audit-post.ts`).
+2. `bearerAuth` maps token → `consumer_id` (`packages/api/src/middleware/auth.ts`).
+3. `url` and optional `callback_url` are SSRF-validated via `validateUrl` /
+   `validateUrlHost` (`packages/fetch/src/safe-fetcher.ts`), with an injectable
+   `callbackResolver` (`packages/api/src/app.ts`) so tests need no network.
+4. DAL inserts a `queued` audit row; the route returns `job_id` immediately.
+5. Worker `runWorker` claims the job with `SKIP LOCKED` + a lease
+   (`packages/worker/src/worker.ts`, `packages/db/src/dal.ts`).
+6. `runAudit` fetches the page, then runs `checkRobots`, `detectRendering`,
+   `computeCitabilityScore`, `validateStructuredData`, `validateLlmsTxt` and builds
+   a `FindingsShape` (`packages/worker/src/pipeline.ts`).
+7. `scorer.score(findings, signal)` returns `{score, findings}`; a heartbeat calls
+   `renewLease` every `leaseTtlSecs/2` and aborts the job when it returns false.
+8. `completeJob` runs on the success path only; `deliverWebhook`
+   (`packages/worker/src/webhook.ts`) posts to `callback_url` and never affects job state.
+9. Consumer polls `GET /audit/:id` or receives the webhook.
 
-### CRM / Sales Flow (`/geo prospect`, `/geo proposal`, `/geo compare`)
+### Scoring provider selection
 
-1. Audit results persisted to `~/.geo-prospects/audits/`
-2. Prospect records managed in `~/.geo-prospects/prospects.json` (`scripts/webapp/app.py` load/save helpers)
-3. Proposals generated to `~/.geo-prospects/proposals/`
-4. Viewed via CLI (`scripts/crm_dashboard.py`) or Flask web UI on `localhost:5050` (`scripts/webapp/app.py`)
+1. `resolveScoringProvider()` reads `SCORING_PROVIDER` (`packages/worker/src/env.ts`);
+   `assertEnv(provider)` fails fast before any await (`packages/worker/src/main.ts`).
+2. `api` → `createScorer(new Anthropic({ maxRetries: 0 }), { model, timeoutMs })`
+   (`packages/worker/src/scorer.ts`).
+3. `cli` → `createCliScorer()` spawns the `claude` binary with `ANTHROPIC_API_KEY`
+   stripped from the child env, forcing subscription auth via
+   `CLAUDE_CODE_OAUTH_TOKEN` / ambient login; stdout is scanned in reverse for the
+   `{type:"result",subtype:"success"}` line, then zod-validated
+   (`packages/worker/src/cli-scorer.ts`).
+4. Both expose the same `.score()` seam, so `worker.ts` / `pipeline.ts` are
+   provider-agnostic (`opts.scorer ?? createScorer(...)` in `worker.ts`).
+
+### Container role dispatch
+
+1. Image `ENTRYPOINT` is `sh scripts/docker-entrypoint.sh`.
+2. The script `case`s on `GEO_ROLE` (default `api`) and `exec`s the matching
+   `packages/<role>/dist/main.js`, making Bun PID 1 so it receives SIGTERM directly.
+3. Role is env-driven because Coolify's Dockerfile build pack ignores per-resource
+   start-command overrides (verified on Coolify 4.1.1; documented in `Dockerfile`).
+4. Migrations run out-of-band as `bun packages/db/scripts/migrate.ts`, not through
+   the entrypoint.
+5. The runtime stage also installs Node.js + a pinned `@anthropic-ai/claude-code`
+   so the worker's CLI scoring path has a `claude` binary; api/cron carry it unused.
+
+### Fetch / decompression path
+
+1. `createSafeFetcher(options)` returns `(url) => Promise<FetchResult>`
+   (`packages/fetch/src/safe-fetcher.ts`).
+2. Hostname resolved via `packages/fetch/src/dns-resolve.ts`; every returned address
+   checked by `packages/fetch/src/ip-validator.ts`; each redirect hop re-validated.
+3. Body streamed through `buildDecompressChain(contentEncoding, maxBytes)`
+   (`packages/fetch/src/decompression.ts`): more than 2 stacked encodings →
+   `DECOMPRESSION_BOMB`; unknown encoding → `FETCH_ERROR`.
+4. `makeByteCounter` sits after the final decompressor so the cap applies to
+   decompressed bytes.
+5. `readBodyBounded` enforces the raw ceiling; all failures surface as
+   `FetchErrorCode` values from `packages/fetch/src/errors.ts`. Decompressor stream
+   errors are contained rather than crashing the process (HEAD `9af25c2`).
+6. `packages/fetch/src/safe-requester.ts` is the POST-capable variant used for webhooks.
 
 **State Management:**
-- All persistent state is user-local JSON under `~/.geo-prospects/`. No database. Scripts are otherwise stateless.
+- All durable state is the `audits` table; the worker holds only an in-flight
+  `Set<Promise<void>>` plus interval handles.
 
 ## Key Abstractions
 
-**Skill (`SKILL.md`):**
-- Purpose: a self-contained command definition with YAML frontmatter (`name`, `description`, `allowed-tools`)
-- Examples: `geo/SKILL.md`, `skills/geo-audit/SKILL.md`
-- Pattern: one directory per command; frontmatter declares allowed tools
+**`Fetcher`:**
+- Purpose: the single outbound-HTTP seam consumed by `@geo/core`.
+- Examples: `packages/core/src/types.ts`, `packages/fetch/src/safe-fetcher.ts`.
+- Pattern: injected function type.
 
-**Subagent (`agents/*.md`):**
-- Purpose: a focused analysis persona invoked in parallel during audit
-- Examples: `agents/geo-technical.md`, `agents/geo-content.md`
-- Pattern: 5 fixed agents matching the 5 audit dimensions
+**`AuditDal` / `SqlExecutor`:**
+- Purpose: separates queue semantics from the driver, enabling PGlite tests.
+- Examples: `packages/db/src/dal.ts` (`createAuditDal`, `makePgExecutor`,
+  `getDefaultDal`, `_resetDefaultDalForTests`), `packages/db/src/__tests__/pglite-executor.ts`.
 
-**Tool script:**
-- Purpose: deterministic, independently testable CLI returning JSON
-- Examples: `scripts/fetch_page.py` (`fetch_page(url) -> dict`), `scripts/citability_scorer.py` (`score_passage(text) -> dict`)
-- Pattern: top-level `try/except ImportError` guard pointing to `requirements.txt`; argv/stdin in, JSON out
+**`Scorer`:**
+- Purpose: interchangeable scoring provider.
+- Examples: `packages/worker/src/types.ts`, `scorer.ts`, `cli-scorer.ts`.
+
+**`FindingsShape`:**
+- Purpose: the deterministic contract handed to the model.
+- Examples: `packages/db/src/types.ts`, consumed in `packages/worker/src/pipeline.ts`.
 
 ## Entry Points
 
-**Skill invocation:**
-- Location: `geo/SKILL.md` (installed to `~/.claude/skills/geo/`)
-- Triggers: `/geo <command> <url>` in Claude Code, or keyword match ("geo", "seo", "audit", "citability", …)
-- Responsibilities: route to sub-skill / orchestrate audit
+**API:** `packages/api/src/main.ts` — default-export `Bun.serve` object; the app is
+built lazily so importing without `DATABASE_URL` does not throw.
 
-**Installer:**
-- Location: `install.sh`, `install-win.sh`
-- Triggers: one-command curl-pipe or local run
-- Responsibilities: clone repo into `~/.claude/skills/geo/`, create isolated `.venv`, patch `.md` python paths to `~/.claude/skills/geo/.venv/bin/python3`
+**Worker:** `packages/worker/src/main.ts` — `assertEnv()` first, then `runWorker`.
 
-**CLI tools:**
-- Location: `scripts/*.py` — each runnable as `python <script>.py`
+**Cron:** `packages/cron/src/main.ts` — one-shot batch; exit code from the summary.
 
-**Web UI:**
-- Location: `scripts/webapp/app.py` — `python app.py` → `http://localhost:5050`
+**Migrations:** `packages/db/scripts/migrate.ts`.
+
+**Skill:** `geo/SKILL.md` (frontmatter-declared Claude Code skill, dispatching to
+`skills/geo-*/` and `agents/*.md`).
 
 ## Architectural Constraints
 
-- **Runtime is Claude:** control flow lives in markdown prompts, not executable code. Changing behavior often means editing `SKILL.md`, not Python.
-- **Isolated venv:** installer pins all Python deps in `~/.claude/skills/geo/.venv`; `.md` files reference that absolute interpreter path. Do not assume system Python.
-- **No shared global state in scripts:** each script is stateless; the only cross-invocation state is `~/.geo-prospects/` JSON files.
-- **Path tilde literalness:** `install.sh` intentionally keeps `~/.claude/...` literal in patched `.md` references (Claude's Bash expands it later) — see comment in `install.sh`. Do not pre-expand to `$HOME`.
-- **Single-threaded scripts:** parallelism happens at the Claude subagent level, not inside Python.
+- **Threading:** single-threaded Bun event loop per role; parallelism is bounded by
+  `WORKER_CONCURRENCY` (default 3) in-process plus horizontal worker replicas.
+- **Global state:** only the lazy singleton in `getDefaultDal()`
+  (`packages/db/src/dal.ts`). Nothing else is module-level mutable.
+- **Anthropic SDK must be `maxRetries: 0`** — SDK-internal retries mask
+  `RateLimitError` as `APIConnectionTimeoutError` and corrupt retry disposition;
+  the lease/attempts mechanism owns retries.
+- **`ANTHROPIC_API_KEY` must be absent from the CLI-scorer child env**, or the
+  `claude` CLI prefers it and bills the API instead of the subscription.
+- **Coolify stop grace must be >= `SHUTDOWN_GRACE_MS`** or drains are truncated.
+- **Circular imports:** none. Package deps form a DAG: core/fetch → db → api/worker/cron.
 
 ## Anti-Patterns
 
-### Putting analysis logic in Python instead of skills
-**What happens:** logic that should be Claude reasoning (scoring narrative, recommendations) gets hard-coded in a script.
-**Why it's wrong:** the design splits probabilistic reasoning (skills/agents) from deterministic computation (scripts). Burying judgment in Python makes it rigid and un-tunable.
-**Do this instead:** keep scripts to fetch/parse/score primitives (see `scripts/citability_scorer.py`), and let `skills/*/SKILL.md` own interpretation.
+### Scoring inside the HTTP request
 
-### Hard-coding the Python interpreter path
-**What happens:** a new `.md` references `python3` or a system path instead of the patched venv path.
-**Why it's wrong:** breaks on installed systems where deps live only in `~/.claude/skills/geo/.venv`.
-**Do this instead:** reference `~/.claude/skills/geo/.venv/bin/python3` as the installer patches (`install.sh`).
+**What happens:** calling a scorer or `createSafeFetcher` from a route handler.
+**Why it's wrong:** ties request latency to a model call and reintroduces SSRF
+surface in the request path; the queue exists precisely to avoid this.
+**Do this instead:** enqueue and let `packages/worker/src/pipeline.ts` do the work.
 
-### Writing CRM state outside `~/.geo-prospects/`
-**What happens:** a script invents its own data location.
-**Why it's wrong:** the CLI dashboard and Flask UI both read fixed paths (`scripts/webapp/app.py` `CRM_PATH`, `PROPOSALS_DIR`, `AUDITS_DIR`).
-**Do this instead:** route all prospect/audit/proposal persistence through `~/.geo-prospects/`.
+### Calling `completeJob` on a partial result
+
+**What happens:** marking a job complete after a fetch or scoring error.
+**Why it's wrong:** persists a bogus score. `runAudit` calls `completeJob` only on
+the success path; fetch errors fail the job before any scoring call.
+**Do this instead:** throw a `FetchError`/`ScoringError` and let the pipeline route
+to `requeueJob` (retryable, attempts < MAX) or `failJob` (terminal).
+
+### Raw `fetch()` for outbound requests
+
+**What happens:** using global `fetch` for a page or a webhook.
+**Why it's wrong:** bypasses DNS pinning, IP validation, redirect re-validation,
+and the decompression byte cap.
+**Do this instead:** `createSafeFetcher` / `createSafeRequester`
+(`packages/fetch/src/safe-requester.ts`).
+
+### Module-level dependency construction
+
+**What happens:** building a DAL, Anthropic client, or fetcher at import time.
+**Why it's wrong:** breaks the PGlite test harness and makes imports env-dependent.
+**Do this instead:** factory + injected deps, as in
+`createApp({ dal, fetcher, apiKeys })` (`packages/api/src/app.ts`).
+
+### Adding a role by adding a CMD override
+
+**What happens:** setting a per-resource start command in Coolify.
+**Why it's wrong:** the Dockerfile build pack silently ignores it and runs the
+default role.
+**Do this instead:** add a `case` branch to `scripts/docker-entrypoint.sh` and set
+`GEO_ROLE` in the resource env.
 
 ## Error Handling
 
-**Strategy:** fail-fast with user-actionable messages.
+**Strategy:** typed error classes carrying a code and an explicit retry disposition.
 
 **Patterns:**
-- Import guards: `try: import requests... except ImportError: print("Run: pip install -r requirements.txt"); sys.exit(1)` (`scripts/fetch_page.py`, `scripts/citability_scorer.py`)
-- Per-result `errors` list collected into the returned dict rather than raising (`fetch_page` result schema)
-- Flask `abort()` for missing CRM resources (`scripts/webapp/app.py`)
+- `FetchErrorCode` in `packages/fetch/src/errors.ts` — terminal for a job.
+- `ScoringError(code, retryable, detail)` in `packages/worker/src/scorer.ts` —
+  `SCORING_TIMEOUT` / `SCORING_RATE_LIMITED` / `SCORING_API_ERROR` /
+  `SCORING_MALFORMED_OUTPUT`; `retryable` decides requeue vs fail.
+- Webhook failures are logged and swallowed — never job-affecting.
+- Cron continues past per-URL failures and aggregates a summary
+  (`packages/cron/src/cron.ts`).
 
 ## Cross-Cutting Concerns
 
-**Logging:** none structured; scripts print to stdout/stderr. `rich` used for CLI presentation (`scripts/crm_dashboard.py`).
-**Validation:** `validators` lib for URLs; BeautifulSoup/lxml for HTML parse robustness.
-**Branding:** white-label overrides via `white-label/brand_config.py` + `white-label/brand.example.json`.
+**Logging:** structured `console` lines carrying `url` + `job_id`/`status`; secrets
+(`CRON_API_TOKEN`, bearer tokens, OAuth tokens) are never logged.
+**Validation:** zod at both edges — request/response schemas via `@hono/zod-openapi`,
+model output via `GeoScoreSchema` in `packages/worker/src/scorer.ts`.
+**Authentication:** static bearer tokens parsed from `GEO_API_KEYS` into a
+token→`consumer_id` map (`packages/api/src/middleware/auth.ts`); every query is
+scoped by `consumer_id`.
 
 ---
 
-*Architecture analysis: 2026-06-01*
+*Architecture analysis: 2026-07-24*
