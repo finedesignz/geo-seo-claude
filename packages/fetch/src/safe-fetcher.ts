@@ -20,10 +20,11 @@
 import { request, Agent } from "undici";
 import type { Dispatcher } from "undici";
 import { Readable } from "node:stream";
+import { Gunzip, Inflate } from "node:zlib";
 import type { FetchResult } from "@geo/core";
 import { resolveAndValidate, DnsValidationError } from "./dns-resolve.js";
 import { FetchErrorCode, buildErrorResult } from "./errors.js";
-import { makeByteCounter, buildDecompressChain } from "./decompression.js";
+import { makeByteCounter, buildDecompressChain, sniffEncoding } from "./decompression.js";
 import type { Resolver } from "./dns-resolve.js";
 
 // ---------------------------------------------------------------------------
@@ -400,54 +401,59 @@ export function createSafeFetcher(options: SafeFetcherOptions = {}): (url: strin
  *
  * Rejects with an error carrying `.code = RESPONSE_TOO_LARGE | DECOMPRESSION_BOMB`
  * if either cap is exceeded.
+ *
+ * Decide-then-pipe, never catch-then-guess: before installing a decompressor,
+ * the actual first wire bytes are sniffed (sniffEncoding). Bun's undici
+ * `request()` transparently decompresses gzip/deflate bodies over real sockets
+ * while still reporting the original Content-Encoding header, so a gzip/deflate
+ * decompressor fed already-plaintext bytes would otherwise throw Z_DATA_ERROR
+ * ("incorrect header check") on the first stage. Only Gunzip/Inflate stages are
+ * sniffable this way (gzip/deflate have fixed magic numbers); brotli has none,
+ * so a declared `br` encoding is always piped through its real decompressor and
+ * genuinely bad bytes still reject — this never masks real corruption as valid.
  */
 export async function readBodyBounded(
   body: { [Symbol.asyncIterator](): AsyncIterator<Buffer | Uint8Array> },
   decompressChain: NodeJS.ReadWriteStream[],
   maxBytes: number,
 ): Promise<string> {
-  // If no decompressors, add a raw-byte identity counter (RESPONSE_TOO_LARGE)
   const hasDecompressor = decompressChain.length > 0;
-  const stages: NodeJS.ReadWriteStream[] = [
-    ...(hasDecompressor
-      ? decompressChain
-      : [makeByteCounter(maxBytes, FetchErrorCode.RESPONSE_TOO_LARGE)]),
-  ];
 
-  // Convert undici body (async iterable) to a Node Readable
-  const source = Readable.from(body as AsyncIterable<Buffer>);
+  // Peek the first chunk off the raw wire stream, then replay it ahead of the
+  // rest of the iterator so no bytes are lost.
+  const iterator = body[Symbol.asyncIterator]();
+  const firstResult = await iterator.next();
+  const firstChunk = firstResult.done
+    ? undefined
+    : Buffer.isBuffer(firstResult.value)
+      ? firstResult.value
+      : Buffer.from(firstResult.value);
 
-  // Pipe source through all stages, collecting from the last stage
-  const last = stages[stages.length - 1]!;
-  const chunks: Buffer[] = [];
-
-  // Tee the raw (pre-decompression) bytes. Bun's undici `request()` transparently
-  // decompresses gzip/deflate bodies over real sockets while still reporting the
-  // original Content-Encoding response header — so the first decompressor stage
-  // then receives already-plaintext bytes and fails with a zlib header-format
-  // error (Z_DATA_ERROR, "incorrect header check"). When that specific error is
-  // seen on the FIRST stage before any decompressed output has been produced, the
-  // body was never actually compressed on the wire — fall back to the raw bytes
-  // instead of surfacing a false FETCH_ERROR. (Node/undici without this Bun quirk
-  // never hits this path: real compressed bytes decompress normally.)
-  const rawChunks: Buffer[] = [];
-  let rawBytes = 0;
-  let rawTooLarge = false;
-  if (hasDecompressor) {
-    source.on("data", (chunk: Buffer | Uint8Array) => {
-      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      rawBytes += buf.length;
-      if (rawBytes > maxBytes) {
-        // Bound the raw tee too — a wire response can't exceed maxBytes even in
-        // the fallback-to-raw path.
-        rawTooLarge = true;
-        return;
-      }
-      rawChunks.push(buf);
-    });
+  async function* replay(): AsyncGenerator<Buffer> {
+    if (firstChunk) yield firstChunk;
+    for (;;) {
+      const { value, done } = await iterator.next();
+      if (done) return;
+      yield Buffer.isBuffer(value) ? value : Buffer.from(value);
+    }
   }
 
-  let usedRawFallback = false;
+  const firstStage = decompressChain[0];
+  const firstStageIsSniffable = firstStage instanceof Gunzip || firstStage instanceof Inflate;
+  const bodyAlreadyPlaintext =
+    hasDecompressor &&
+    firstStageIsSniffable &&
+    firstChunk !== undefined &&
+    sniffEncoding(firstChunk) === null;
+
+  const stages: NodeJS.ReadWriteStream[] =
+    hasDecompressor && !bodyAlreadyPlaintext
+      ? decompressChain
+      : [makeByteCounter(maxBytes, FetchErrorCode.RESPONSE_TOO_LARGE)];
+
+  const source = Readable.from(replay());
+  const last = stages[stages.length - 1]!;
+  const chunks: Buffer[] = [];
 
   await new Promise<void>((resolve, reject) => {
     let settled = false;
@@ -457,13 +463,6 @@ export async function readBodyBounded(
       // Tear down the source so the undici socket is released on any stage error.
       source.destroy();
       reject(err);
-    };
-    const fallbackToRaw = () => {
-      if (settled) return;
-      settled = true;
-      usedRawFallback = true;
-      source.destroy();
-      resolve();
     };
 
     last.on("data", (chunk: Buffer | Uint8Array) => {
@@ -478,32 +477,9 @@ export async function readBodyBounded(
 
     // Attach an error handler to EVERY stage — .pipe() does not forward errors,
     // so a middle decompressor (e.g. brotli) erroring would otherwise be an
-    // unhandled 'error' event that crashes the process. Route them all to fail(),
-    // except the first stage's header-format error, which falls back to raw.
+    // unhandled 'error' event that crashes the process.
     source.on("error", fail);
-    stages.forEach((stage, i) => {
-      stage.on("error", (err: NodeJS.ErrnoException) => {
-        if (
-          hasDecompressor &&
-          i === 0 &&
-          chunks.length === 0 &&
-          err.code === "Z_DATA_ERROR" &&
-          /header/i.test(err.message ?? "")
-        ) {
-          if (rawTooLarge) {
-            const tooLargeErr = new Error(
-              `Response exceeded ${maxBytes} bytes (${FetchErrorCode.RESPONSE_TOO_LARGE})`,
-            ) as NodeJS.ErrnoException & { code: string };
-            tooLargeErr.code = FetchErrorCode.RESPONSE_TOO_LARGE;
-            fail(tooLargeErr);
-            return;
-          }
-          fallbackToRaw();
-          return;
-        }
-        fail(err);
-      });
-    });
+    stages.forEach((stage) => stage.on("error", fail));
 
     let current: NodeJS.ReadableStream = source;
     for (const stage of stages) {
@@ -511,9 +487,6 @@ export async function readBodyBounded(
     }
   });
 
-  if (usedRawFallback) {
-    return Buffer.concat(rawChunks).toString("utf8");
-  }
   return Buffer.concat(chunks).toString("utf8");
 }
 

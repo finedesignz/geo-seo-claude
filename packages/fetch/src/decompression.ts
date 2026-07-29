@@ -51,6 +51,44 @@ export function makeByteCounter(
 }
 
 // ---------------------------------------------------------------------------
+// sniffEncoding
+// ---------------------------------------------------------------------------
+
+/**
+ * Sniffs the actual first bytes of a response body to determine whether it
+ * is genuinely gzip- or deflate-compressed on the wire, independent of what
+ * the Content-Encoding header claims.
+ *
+ * Needed because Bun's undici `request()` transparently decompresses gzip/
+ * deflate bodies over real sockets while still reporting the original
+ * Content-Encoding header — so the header alone cannot be trusted to decide
+ * whether to install a decompressor.
+ *
+ * - gzip: fixed magic number 0x1F 0x8B (RFC 1952 §2.3.1).
+ * - deflate/zlib: CMF byte's low nibble is 8 (deflate compression method),
+ *   AND the 16-bit big-endian header (CMF*256 + FLG) is a multiple of 31
+ *   (RFC 1950 §2.2 header check).
+ * - Fewer than 2 bytes → cannot sniff → null.
+ */
+export function sniffEncoding(firstBytes: Buffer): "gzip" | "deflate" | null {
+  if (firstBytes.length < 2) {
+    return null;
+  }
+
+  if (firstBytes[0] === 0x1f && firstBytes[1] === 0x8b) {
+    return "gzip";
+  }
+
+  const cmf = firstBytes[0]!;
+  const flg = firstBytes[1]!;
+  if ((cmf & 0x0f) === 8 && (cmf * 256 + flg) % 31 === 0) {
+    return "deflate";
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // buildDecompressChain
 // ---------------------------------------------------------------------------
 
