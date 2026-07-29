@@ -12,7 +12,10 @@ set -eu
 
 case "${GEO_ROLE:-api}" in
   worker)
-    exec sh "$(dirname "$0")/worker-healthcheck.sh"
+    # bash, not sh: worker-healthcheck.sh uses `set -o pipefail`, which dash
+    # (this image's /bin/sh) rejects with "Illegal option -o pipefail" -> exit 2
+    # -> permanently unhealthy -> restart loop.
+    exec bash "$(dirname "$0")/worker-healthcheck.sh"
     ;;
   api)
     port="${PORT:-8080}"
