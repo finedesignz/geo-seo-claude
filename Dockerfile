@@ -87,9 +87,14 @@ EXPOSE 8080
 # in-flight audits up to SHUTDOWN_GRACE_MS — Coolify stop grace MUST be >= that (D-09).
 STOPSIGNAL SIGTERM
 
-# No global HEALTHCHECK here (Pitfall 7): the default role is the API, which writes
-# no heartbeat. Health is configured PER-RESOURCE in Coolify (worker uses
-# scripts/worker-healthcheck.sh; API uses an HTTP probe). See plan 02 runbook.
+# Role-aware HEALTHCHECK (D-06 follow-up): one image serves all roles, so
+# scripts/healthcheck.sh dispatches on GEO_ROLE — worker uses the heartbeat
+# check, api probes GET /healthz, cron/other exits 0 (no liveness signal
+# between one-shot runs). Coolify's own per-resource health check config (if
+# any) still applies on top of this; this exists so the image is self-healing
+# even without a Coolify-side check.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD sh scripts/healthcheck.sh
 
 # Role dispatch via GEO_ROLE (default api). See scripts/docker-entrypoint.sh — Coolify
 # Dockerfile build pack does not honor per-resource start-command overrides, so the
