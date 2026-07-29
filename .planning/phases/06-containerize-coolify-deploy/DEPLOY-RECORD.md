@@ -1,6 +1,62 @@
 # DEPLOY-RECORD — Phase 6 Plan 03 (Live Coolify Deploy)
 
-**STATUS: DEFERRED-LIVE**
+## UPDATE 2026-07-29 — ACTUALLY DEPLOYED
+
+The "DEFERRED-LIVE" status below is **superseded**. The live Coolify deploy happened on
+**2026-06-07** and has been running since. This section records the real live state;
+the original content below is preserved for history (it documents why the deploy was
+believed blocked at the time it was written, and most of those blockers were in fact
+cleared shortly after).
+
+- Coolify project **geo-api** (uuid `lua4tz9ahho84d7yqnhhw4q6`), environment
+  **production** (`fbnr7ljbkhssavfzu8t766ym`), server **localhost**
+  (`b4kc8gwog8gk4s0gwc0s8ggk`), Coolify 4.1.1.
+- App **geo-api**: uuid `ckmm0xfx45kxe3n9p44xkpx5`, `running:healthy`, port 8080, HTTP
+  health check on `/healthz` **enabled**, created 2026-06-07. URL:
+  `https://ckmm0xfx45kxe3n9p44xkpx5.coolify.titaniumlabs.us` (auto uuid subdomain, no
+  custom domain).
+- App **geo-api-worker**: uuid `b1226r7ny7ic0sl1kdpkmi60`, created 2026-06-07. Health
+  check was disabled until the role-aware `HEALTHCHECK` fix (Dockerfile +
+  `scripts/healthcheck.sh`, this same day) closed that gap.
+- DB **geo-api-db**: uuid `vuikrtey4ldbvanp3xzwk4fy`, `postgres:16-alpine`,
+  `running:healthy`, not public.
+- Deploys track branch `phase-01-geo-core-deterministic-package` at HEAD
+  (`git_commit_sha = "HEAD"`).
+- Live verified 2026-07-29: `GET /healthz` -> 200 `{"status":"ok","db":"ok"}`;
+  `/openapi.json` -> 200; `/docs` -> 200; unauthenticated `POST /audit` -> 401.
+
+**Which superseded blockers were in fact cleared on 2026-06-07:** #1 (Coolify
+app/Postgres provisioned), #3 (secrets entered into Coolify env). Blocker #2 (pushing
+to the third-party `origin`) was resolved by deploying from the branch directly inside
+Coolify without requiring a push to that remote. Blocker #4 (operator gate) was
+exercised by the operator, who performed the provisioning below.
+
+**Remaining real blocker (not what this record originally described):** end-to-end
+audits still could not succeed until 2026-07-29. The `audits` table had 4 rows, all
+failed (2x `max_attempts_exceeded` 2026-06-11/12, 2x `FETCH_ERROR` from verification
+testing). Root cause: Bun's undici transparently decompresses gzip/deflate while still
+reporting `Content-Encoding`, so `safe-fetcher` fed already-plaintext bytes into a
+gunzip stage, causing `Z_DATA_ERROR` -> `FETCH_ERROR` on every fetch. Fixed by commit
+`1610ae8` (byte-sniffing via `sniffEncoding` instead of trusting the header), deployed
+to the worker 2026-07-29; a live audit then advanced past fetch and failed at
+`SCORING_API_ERROR`, proving the deterministic fetch pipeline now works end-to-end in
+prod.
+
+Scoring itself is still blocked: the worker has `SCORING_PROVIDER=cli` and
+`CLAUDE_CONFIG_DIR=/claude-config` (bind mount `/data/geo-api-claude`), but that
+directory is empty and `CLAUDE_CODE_OAUTH_TOKEN` is unset. An in-container `claude -p`
+probe returns HTTP 401 `authentication_failed`. This requires the operator to run
+`claude setup-token` (global rule 23a) — there is no automated path. Both apps also
+carry an inert `ANTHROPIC_API_KEY` env var (35 chars, not a valid key shape) that
+`cli-scorer.ts:267` strips from the spawned child's env; it should be removed,
+scheduled to be bundled with adding the OAuth token.
+
+---
+
+## ORIGINAL RECORD (2026-06-XX) — superseded by the update above
+
+**STATUS: DEFERRED-LIVE** (superseded — see "UPDATE 2026-07-29" above; the deploy did
+happen on 2026-06-07)
 
 The live Coolify deploy was **not performed**. The human gate (operator provisioning of
 Coolify resources + secrets) is **UNMET**. Per `06-03-PLAN.md` checkpoint option
