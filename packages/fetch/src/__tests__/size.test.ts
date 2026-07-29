@@ -153,6 +153,34 @@ describe("size cap and decompression bomb", () => {
     expect(result.error).toBe(FetchErrorCode.DECOMPRESSION_BOMB);
   });
 
+  it("BUG regression: Content-Encoding: gzip header but already-plaintext body → 200 with raw body (not FETCH_ERROR)", async () => {
+    // Reproduces the production FETCH_ERROR: Bun's undici `request()` transparently
+    // decompresses gzip/deflate bodies over real sockets while the Content-Encoding
+    // response header still reports "gzip". The prior implementation always ran
+    // createGunzip() on the (already-plaintext) bytes, which threw a zlib
+    // Z_DATA_ERROR "incorrect header check" — caught and surfaced as FETCH_ERROR
+    // on every single real-world audit (100% failure rate, BUG report 2026-07-27).
+    // This test's mock server sends plaintext with a lying Content-Encoding: gzip
+    // header — the exact shape undici's real body looks like on Bun.
+    const body = "<!doctype html><html><body>hello</body></html>";
+
+    const { fetcher, mockPool } = await setupFetcherWithServer((_req, res) => {
+      res.writeHead(200, { "Content-Encoding": "gzip" });
+      res.end(body);
+    });
+
+    mockPool
+      .intercept({ path: "/lying-encoding", method: "GET" })
+      .reply(200, body, {
+        headers: { "content-encoding": "gzip" },
+      });
+
+    const result = await fetcher(`http://example.test:${srv.port}/lying-encoding`);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(200);
+    expect(result.body).toBe(body);
+  });
+
   it("under-cap body → 200 with correct body string", async () => {
     const body = "hello world";
 

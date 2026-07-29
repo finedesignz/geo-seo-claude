@@ -33,11 +33,21 @@ describe("readBodyBounded error containment", () => {
     await expect(readBodyBounded(bodyOf(garbage), chain, MAX)).rejects.toBeTruthy();
   });
 
-  it("rejects when a gzip decompressor fails on bad bytes", async () => {
+  it("falls back to raw bytes when the FIRST stage sees a gzip header-format error (BUG: FETCH_ERROR on every prod audit, 2026-07-27)", async () => {
+    // This is not "bad bytes" in the corrupt-stream sense the brotli test above
+    // covers — it's the exact shape of the production failure: Bun's undici
+    // `request()` transparently decompresses gzip bodies over real sockets while
+    // the Content-Encoding response header still says "gzip". createGunzip() then
+    // receives already-plaintext bytes and throws Z_DATA_ERROR "incorrect header
+    // check" on the very first stage, with zero decompressed output produced yet.
+    // Rejecting here (the old behavior) turned every real-world gzip response
+    // into FETCH_ERROR — 100% of production audits failed this way. The correct
+    // behavior is to treat the header-format error as "wasn't actually
+    // compressed" and use the raw bytes.
     const chain = buildDecompressChain("gzip", MAX);
-    await expect(
-      readBodyBounded(bodyOf(Buffer.from("not gzip")), chain, MAX),
-    ).rejects.toBeTruthy();
+    const alreadyPlaintext = "not gzip — this is what Bun hands us post-decompress";
+    const out = await readBodyBounded(bodyOf(Buffer.from(alreadyPlaintext)), chain, MAX);
+    expect(out).toBe(alreadyPlaintext);
   });
 
   it("decodes a valid gzip body through the chain", async () => {

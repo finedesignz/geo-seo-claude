@@ -407,10 +407,11 @@ export async function readBodyBounded(
   maxBytes: number,
 ): Promise<string> {
   // If no decompressors, add a raw-byte identity counter (RESPONSE_TOO_LARGE)
+  const hasDecompressor = decompressChain.length > 0;
   const stages: NodeJS.ReadWriteStream[] = [
-    ...(decompressChain.length === 0
-      ? [makeByteCounter(maxBytes, FetchErrorCode.RESPONSE_TOO_LARGE)]
-      : decompressChain),
+    ...(hasDecompressor
+      ? decompressChain
+      : [makeByteCounter(maxBytes, FetchErrorCode.RESPONSE_TOO_LARGE)]),
   ];
 
   // Convert undici body (async iterable) to a Node Readable
@@ -420,6 +421,34 @@ export async function readBodyBounded(
   const last = stages[stages.length - 1]!;
   const chunks: Buffer[] = [];
 
+  // Tee the raw (pre-decompression) bytes. Bun's undici `request()` transparently
+  // decompresses gzip/deflate bodies over real sockets while still reporting the
+  // original Content-Encoding response header — so the first decompressor stage
+  // then receives already-plaintext bytes and fails with a zlib header-format
+  // error (Z_DATA_ERROR, "incorrect header check"). When that specific error is
+  // seen on the FIRST stage before any decompressed output has been produced, the
+  // body was never actually compressed on the wire — fall back to the raw bytes
+  // instead of surfacing a false FETCH_ERROR. (Node/undici without this Bun quirk
+  // never hits this path: real compressed bytes decompress normally.)
+  const rawChunks: Buffer[] = [];
+  let rawBytes = 0;
+  let rawTooLarge = false;
+  if (hasDecompressor) {
+    source.on("data", (chunk: Buffer | Uint8Array) => {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      rawBytes += buf.length;
+      if (rawBytes > maxBytes) {
+        // Bound the raw tee too — a wire response can't exceed maxBytes even in
+        // the fallback-to-raw path.
+        rawTooLarge = true;
+        return;
+      }
+      rawChunks.push(buf);
+    });
+  }
+
+  let usedRawFallback = false;
+
   await new Promise<void>((resolve, reject) => {
     let settled = false;
     const fail = (err: unknown) => {
@@ -428,6 +457,13 @@ export async function readBodyBounded(
       // Tear down the source so the undici socket is released on any stage error.
       source.destroy();
       reject(err);
+    };
+    const fallbackToRaw = () => {
+      if (settled) return;
+      settled = true;
+      usedRawFallback = true;
+      source.destroy();
+      resolve();
     };
 
     last.on("data", (chunk: Buffer | Uint8Array) => {
@@ -442,11 +478,32 @@ export async function readBodyBounded(
 
     // Attach an error handler to EVERY stage — .pipe() does not forward errors,
     // so a middle decompressor (e.g. brotli) erroring would otherwise be an
-    // unhandled 'error' event that crashes the process. Route them all to fail().
+    // unhandled 'error' event that crashes the process. Route them all to fail(),
+    // except the first stage's header-format error, which falls back to raw.
     source.on("error", fail);
-    for (const stage of stages) {
-      stage.on("error", fail);
-    }
+    stages.forEach((stage, i) => {
+      stage.on("error", (err: NodeJS.ErrnoException) => {
+        if (
+          hasDecompressor &&
+          i === 0 &&
+          chunks.length === 0 &&
+          err.code === "Z_DATA_ERROR" &&
+          /header/i.test(err.message ?? "")
+        ) {
+          if (rawTooLarge) {
+            const tooLargeErr = new Error(
+              `Response exceeded ${maxBytes} bytes (${FetchErrorCode.RESPONSE_TOO_LARGE})`,
+            ) as NodeJS.ErrnoException & { code: string };
+            tooLargeErr.code = FetchErrorCode.RESPONSE_TOO_LARGE;
+            fail(tooLargeErr);
+            return;
+          }
+          fallbackToRaw();
+          return;
+        }
+        fail(err);
+      });
+    });
 
     let current: NodeJS.ReadableStream = source;
     for (const stage of stages) {
@@ -454,6 +511,9 @@ export async function readBodyBounded(
     }
   });
 
+  if (usedRawFallback) {
+    return Buffer.concat(rawChunks).toString("utf8");
+  }
   return Buffer.concat(chunks).toString("utf8");
 }
 
