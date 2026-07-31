@@ -52,6 +52,14 @@ export interface CliSpawnOptions {
   signal: AbortSignal;
   /** Environment for the child (ANTHROPIC_API_KEY already stripped by caller). */
   env: NodeJS.ProcessEnv;
+  /**
+   * Prompt text written to the child's stdin and closed (EOF), NOT passed as
+   * an argv element. `claude -p` reads the prompt from stdin when no
+   * positional prompt argument is given (verified: `claude -p <<< "..."`
+   * returns the response). This is what keeps the OS argv size bounded
+   * regardless of prompt size — see buildCliArgv.
+   */
+  stdin: string;
 }
 
 export type CliSpawnFn = (
@@ -71,8 +79,20 @@ const defaultSpawnFn: CliSpawnFn = (bin, args, opts) =>
       env: opts.env,
       // POSIX: own process group so we can kill the whole tree; not on Windows.
       detached: process.platform !== "win32",
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
+
+    // Write the prompt to stdin and close it (EOF) — this is the E2BIG fix:
+    // the prompt never touches argv, so OS argv-size limits no longer apply
+    // regardless of how large the findings payload is. If the child dies
+    // before consuming stdin (fast timeout/kill), the write can EPIPE; that
+    // is expected and must not crash the process or reject this promise —
+    // the timeout/kill path below already handles the outcome.
+    child.stdin?.on("error", () => {
+      /* EPIPE on early child exit — outcome handled by timeout/close below */
+    });
+    child.stdin?.write(opts.stdin);
+    child.stdin?.end();
 
     let stdout = "";
     let stderr = "";
@@ -128,11 +148,18 @@ const defaultSpawnFn: CliSpawnFn = (bin, args, opts) =>
 /**
  * Build the `claude -p` argv. Print mode, single turn, stream-json output, no
  * tools (pure structured-JSON return). Never adds a bypass/dangerous flag.
+ *
+ * Deliberately does NOT take the prompt: the prompt is delivered via stdin
+ * (see CliSpawnOptions.stdin), never as an argv element. Findings-heavy pages
+ * can produce multi-hundred-KB prompts; putting one in argv blows the OS
+ * ARG_MAX/execve limit and spawn() fails with E2BIG before any `claude`
+ * process starts — this crashed real production jobs (e.g. stripe.com/blog,
+ * unlogged, un-retried; see VERIFICATION-scoring-fix.md). Because this argv
+ * never contains the prompt, its size is now constant regardless of page size.
  */
-export function buildCliArgv(prompt: string, model: string): string[] {
+export function buildCliArgv(model: string): string[] {
   return [
     "-p",
-    prompt,
     "--output-format",
     "stream-json",
     "--verbose",
@@ -364,12 +391,13 @@ export function createCliScorer(opts: CliScorerOptions) {
       const childEnv: NodeJS.ProcessEnv = { ...process.env };
       delete childEnv["ANTHROPIC_API_KEY"];
 
-      const argv = buildCliArgv(buildCliPrompt(findings), opts.model);
+      const argv = buildCliArgv(opts.model);
 
       const result = await spawnFn(bin, argv, {
         timeoutMs: opts.timeoutMs,
         signal: ac.signal,
         env: childEnv,
+        stdin: buildCliPrompt(findings),
       });
 
       if (result.timedOut || ac.signal.aborted) {

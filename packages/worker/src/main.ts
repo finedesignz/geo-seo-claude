@@ -17,6 +17,7 @@ import { getDefaultDal } from "@geo/db";
 import { createSafeFetcher } from "@geo/fetch";
 import { runWorker } from "./worker.js";
 import { createCliScorer } from "./cli-scorer.js";
+import { loadWorkerTunables } from "./config.js";
 import type { Scorer } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -29,24 +30,19 @@ const SCORING_PROVIDER = resolveScoringProvider();
 assertEnv(SCORING_PROVIDER);
 
 // ---------------------------------------------------------------------------
-// Env parsing with defaults
+// Env parsing with defaults (pure logic lives in config.ts — unit tested there)
 // ---------------------------------------------------------------------------
 
-function envInt(key: string, fallback: number): number {
-  const val = process.env[key];
-  if (!val) return fallback;
-  const n = parseInt(val, 10);
-  return isNaN(n) ? fallback : n;
-}
-
-const WORKER_CONCURRENCY = envInt("WORKER_CONCURRENCY", 3);
-const POLL_INTERVAL_MS = envInt("POLL_INTERVAL_MS", 1000);
-const LEASE_TTL_SECONDS = envInt("LEASE_TTL_SECONDS", 120);
-const RECLAIM_INTERVAL_MS = envInt("RECLAIM_INTERVAL_MS", Math.floor(LEASE_TTL_SECONDS / 2) * 1000);
-const MAX_ATTEMPTS = envInt("MAX_ATTEMPTS", 3);
-const SCORING_TIMEOUT_MS = envInt("SCORING_TIMEOUT_MS", 60_000);
-const SHUTDOWN_GRACE_MS = envInt("SHUTDOWN_GRACE_MS", 30_000);
-const SCORING_MODEL = process.env["SCORING_MODEL"] ?? "claude-sonnet-4-6";
+const {
+  workerConcurrency: WORKER_CONCURRENCY,
+  pollIntervalMs: POLL_INTERVAL_MS,
+  leaseTtlSeconds: LEASE_TTL_SECONDS,
+  reclaimIntervalMs: RECLAIM_INTERVAL_MS,
+  maxAttempts: MAX_ATTEMPTS,
+  scoringTimeoutMs: SCORING_TIMEOUT_MS,
+  shutdownGraceMs: SHUTDOWN_GRACE_MS,
+  scoringModel: SCORING_MODEL,
+} = loadWorkerTunables();
 
 // ---------------------------------------------------------------------------
 // Build production dependencies

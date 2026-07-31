@@ -45,9 +45,11 @@ function fakeSpawn(result: Partial<CliSpawnResult>): CliSpawnFn {
 
 describe("buildCliArgv", () => {
   it("is print-mode, single-turn, stream-json, with model — and no bypass flags", () => {
-    const argv = buildCliArgv("PROMPT", "claude-sonnet-4-6");
+    const argv = buildCliArgv("claude-sonnet-4-6");
     expect(argv).toContain("-p");
-    expect(argv).toContain("PROMPT");
+    // Prompt is delivered via stdin, never argv — asserting it's absent guards
+    // the E2BIG fix (large prompts must never touch argv/execve limits).
+    expect(argv).not.toContain("PROMPT");
     expect(argv).toEqual(expect.arrayContaining(["--output-format", "stream-json"]));
     expect(argv).toEqual(expect.arrayContaining(["--max-turns", "1"]));
     expect(argv).toEqual(expect.arrayContaining(["--model", "claude-sonnet-4-6"]));
