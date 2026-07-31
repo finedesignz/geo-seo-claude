@@ -154,6 +154,11 @@ export async function runAudit(job: AuditJob, deps: PipelineDeps): Promise<void>
 
       if (err instanceof ScoringError) {
         if (ac.signal.aborted) return;
+        // Log the full detail (redacted, truncated) so a prod failure is
+        // diagnosable from `docker logs` without a local repro — only
+        // err.code is persisted to the DB (errorCode column), err.message
+        // carries the diagnostic detail and would otherwise be discarded.
+        console.error(`[pipeline] scoring failed for job ${job.id}: ${err.message}`);
         // All ScoringErrors are retryable (D-13). Route by attempts vs cap.
         if (job.attempts < maxAttempts) {
           const ok = await dal.requeueJob(job.id, job.leaseToken!, err.code);
