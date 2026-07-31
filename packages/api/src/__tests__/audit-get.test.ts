@@ -124,4 +124,30 @@ describe("GET /audit/{job_id}", () => {
     const res = await app.request(`/audit/${job.id}`);
     expect(res.status).toBe(401);
   });
+
+  // Regression (defect: malformed job_id crashed the uuid cast in Postgres,
+  // an uncaught 22P02 escaped as a raw 500 instead of a clean 4xx).
+  it("malformed job_id (not shaped like a uuid) → 400, never 500", async () => {
+    test = await makeTestDal();
+    const app = build(test);
+    const res = await app.request(`/audit/does-not-exist-12345`, { headers: HOW });
+    expect(res.status).not.toBe(500);
+    expect([400, 404, 422]).toContain(res.status);
+  });
+
+  it("malicious job_id (SQL-injection-shaped string) → 400, never 500", async () => {
+    test = await makeTestDal();
+    const app = build(test);
+    const res = await app.request(`/audit/${encodeURIComponent("' OR 1=1 --")}`, { headers: HOW });
+    expect(res.status).not.toBe(500);
+    expect([400, 404, 422]).toContain(res.status);
+  });
+
+  it("47-char non-uuid job_id → 400, never 500", async () => {
+    test = await makeTestDal();
+    const app = build(test);
+    const res = await app.request(`/audit/${"x".repeat(47)}`, { headers: HOW });
+    expect(res.status).not.toBe(500);
+    expect([400, 404, 422]).toContain(res.status);
+  });
 });

@@ -44,6 +44,22 @@ function makeOkFetcher(body = "<html>hello</html>"): Fetcher {
   });
 }
 
+/**
+ * A fetcher stub that soft-404s: any path (including /llms.txt) returns 200 +
+ * the homepage HTML, matching sites that serve a catch-all page instead of a
+ * real 404. Regression guard for the llmsTxt-mislabeled-as-homepage-HTML defect.
+ */
+function makeSoftHomepage404Fetcher(): Fetcher {
+  const homepage = "<!doctype html><html><head><title>Example Domain</title></head><body>Example Domain</body></html>";
+  return async (url: string): Promise<FetchResult> => ({
+    url,
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8" },
+    body: homepage,
+    redirectChain: [],
+  });
+}
+
 /** A fetcher stub that returns an SSRF error for the primary URL. */
 function makeSsrfFetcher(): Fetcher {
   return async (_url: string): Promise<FetchResult> => ({
@@ -131,6 +147,28 @@ describe("pipeline (WORK-02)", () => {
     expect(after!.score).toBe(72);
     expect(after!.findings).not.toBeNull();
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // WORK-02a2: soft-404 on /llms.txt → findings.llmsTxt left undefined,
+  // NEVER populated with the homepage HTML (regression for the
+  // llmsTxt-mislabeled-as-homepage-HTML defect).
+  // -------------------------------------------------------------------------
+  it("WORK-02a2: soft-404 /llms.txt (200 + homepage HTML) → findings.llmsTxt undefined, not homepage HTML", async () => {
+    const job = await insertAndClaim();
+    const { score: scoreSpy, spy } = makeScorer(72);
+
+    await runAudit(job, {
+      dal,
+      scorer: { score: scoreSpy },
+      fetcher: makeSoftHomepage404Fetcher(),
+      leaseTtlSecs: LEASE_TTL,
+      maxAttempts: MAX_ATTEMPTS,
+    });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const findingsArg = spy.mock.calls[0]![0] as { llmsTxt?: { content: string } };
+    expect(findingsArg.llmsTxt).toBeUndefined();
   });
 
   // -------------------------------------------------------------------------

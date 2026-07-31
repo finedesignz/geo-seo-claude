@@ -17,11 +17,27 @@ import {
   validateStructuredData,
   validateLlmsTxt,
 } from "@geo/core";
-import type { Fetcher } from "@geo/core";
+import type { Fetcher, FetchResult } from "@geo/core";
 import type { AuditJob, AuditDal, FindingsShape } from "@geo/db";
 import { ScoringError } from "./scorer.js";
 import { deliverWebhook } from "./webhook.js";
 import type { WebhookRequester } from "./webhook.js";
+
+// ---------------------------------------------------------------------------
+// Soft-404 guard (llms.txt sub-fetch)
+// ---------------------------------------------------------------------------
+
+/**
+ * True when a FetchResult is HTML rather than a plain-text llms.txt document —
+ * either by declared content-type or by a sniffed doctype/html body prefix.
+ * Catches sites that soft-404 (200 + homepage HTML) for any unknown path.
+ */
+function isHtmlResponse(result: FetchResult): boolean {
+  const contentType = result.headers["content-type"] ?? "";
+  if (contentType.toLowerCase().includes("text/html")) return true;
+  const bodyStart = result.body.trimStart().slice(0, 15).toLowerCase();
+  return bodyStart.startsWith("<!doctype") || bodyStart.startsWith("<html");
+}
 
 // ---------------------------------------------------------------------------
 // Deps shape for runAudit
@@ -136,10 +152,15 @@ export async function runAudit(job: AuditJob, deps: PipelineDeps): Promise<void>
     // llms.txt — sub-fetch (reuses safe fetcher)
     const llmsTxtUrl = new URL("/llms.txt", job.url).toString();
     const llmsResult = await fetcher(llmsTxtUrl);
-    if (!llmsResult.error && llmsResult.body) {
+    // Guard against soft-404s: many sites return 200 + the homepage HTML for
+    // any unknown path (including /llms.txt) instead of a real 404. Trusting
+    // the 200 status alone would misreport the homepage as the site's
+    // llms.txt. Detect via content-type or an HTML-shaped body and treat it
+    // the same as absent — leave findings.llmsTxt undefined.
+    if (!llmsResult.error && llmsResult.body && !isHtmlResponse(llmsResult)) {
       findings.llmsTxt = validateLlmsTxt(llmsResult.body);
     }
-    // If llms.txt is absent/blocked, leave findings.llmsTxt undefined (LLM scores conservatively)
+    // If llms.txt is absent/blocked/a soft-404, leave findings.llmsTxt undefined (LLM scores conservatively)
 
     // -----------------------------------------------------------------------
     // Step 3: score (Anthropic call)

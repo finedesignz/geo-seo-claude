@@ -14,7 +14,14 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { AppDeps, AppVariables } from "../app.js";
 
 const Params = z.object({
-  job_id: z.string().openapi({ param: { name: "job_id", in: "path" }, example: "..." }),
+  // job_id maps to a `uuid` PK column (0001_create_audits.sql). Enforcing the
+  // shape here rejects malformed/malicious values with a clean 400 before they
+  // ever reach the DB layer — without this, Postgres throws 22P02
+  // (invalid_text_representation) on the uuid cast and that escapes as a raw 500.
+  job_id: z
+    .string()
+    .uuid()
+    .openapi({ param: { name: "job_id", in: "path" }, example: "3fa85f64-5717-4562-b3fc-2c963f66afa6" }),
 });
 
 /** Explicit poll DTO (D-15) — no internal columns. */
@@ -40,6 +47,10 @@ const route = createRoute({
     200: {
       content: { "application/json": { schema: PollResponse } },
       description: "Current job status (score+findings when done)",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "job_id is not a valid UUID",
     },
     401: {
       content: { "application/json": { schema: ErrorResponse } },
