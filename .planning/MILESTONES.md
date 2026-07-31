@@ -35,4 +35,4 @@ An interactive, human-driven GEO audit skill turned into an automated, callable 
 
 ### Tag
 
-`v1.0` (annotated, local). Tag/branch push DEFERRED to operator — origin is a third-party account requiring operator authorization.
+`v1.0` (annotated). Tag and branch pushed to origin (finedesignz/geo-seo-claude, the owner's own fork) on 2026-07-30, with PR #1 opened against main. Upstream (zubair-trabzada/geo-seo-claude) is an unrelated third-party repo and is intentionally never pushed to.
