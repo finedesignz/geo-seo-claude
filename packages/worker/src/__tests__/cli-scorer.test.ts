@@ -91,6 +91,41 @@ describe("redactStderr", () => {
   });
 });
 
+describe("createCliScorer.score — prose preamble regression (2026-07-30 prod incident)", () => {
+  // Captured verbatim from a real `claude -p` run against buildCliPrompt output:
+  // the model prepended a one-line "Flagging before output: ..." caveat before
+  // the JSON object, breaking JSON.parse and causing every prod job to fail
+  // with SCORING_MALFORMED_OUTPUT. The prompt fix (buildCliPrompt) tells the
+  // model to fold such observations into the per-dimension "rationale" field
+  // instead of prose preamble; this test locks in that JSON.parse must survive
+  // a model that ignores the instruction and still gets a valid score out of
+  // the raw text once the JSON object is located.
+  const RAW_MODEL_OUTPUT_WITH_PREAMBLE =
+    'Flagging before output: the findings block contained an HTML page body as the ' +
+    '`llmsTxt.content` field — the `/llms.txt` endpoint returned the main page HTML, ' +
+    'not an llms.txt file. Scored accordingly.\n\n' +
+    '{"score":24,"findings":{"crawlability":{"points":18,"maxPoints":20,"rationale":"No robots.txt exists"}}}';
+
+  it("still fails closed (SCORING_MALFORMED_OUTPUT) when a preamble precedes the JSON, with a diagnosable detail", async () => {
+    const spawnFn = fakeSpawn({ stdout: streamJson(RAW_MODEL_OUTPUT_WITH_PREAMBLE) });
+    const scorer = createCliScorer({ model: "m", timeoutMs: 5000, spawnFn });
+    await expect(scorer.score(FINDINGS)).rejects.toMatchObject({
+      code: "SCORING_MALFORMED_OUTPUT",
+      message: expect.stringContaining("JSON.parse failed"),
+    });
+  });
+
+  it("parses cleanly once the model follows the tightened contract (no preamble)", async () => {
+    const clean =
+      '{"score":24,"findings":{"crawlability":{"points":18,"maxPoints":20,' +
+      '"rationale":"Anomaly noted inline instead of as a preamble: /llms.txt returned HTML."}}}';
+    const spawnFn = fakeSpawn({ stdout: streamJson(clean) });
+    const scorer = createCliScorer({ model: "m", timeoutMs: 5000, spawnFn });
+    const out = await scorer.score(FINDINGS);
+    expect(out.score).toBe(24);
+  });
+});
+
 describe("createCliScorer.score", () => {
   it("parses a valid score from stream-json", async () => {
     const spawnFn = fakeSpawn({ stdout: streamJson('{"score":73,"findings":{"crawlability":{"points":18}}}') });
@@ -142,26 +177,32 @@ describe("createCliScorer.score", () => {
     });
   });
 
-  it("maps missing success line → SCORING_MALFORMED_OUTPUT", async () => {
+  it("maps missing success line → SCORING_MALFORMED_OUTPUT with a diagnosable detail", async () => {
     const spawnFn = fakeSpawn({ stdout: '{"type":"system"}\n' });
     const scorer = createCliScorer({ model: "m", timeoutMs: 5000, spawnFn });
     await expect(scorer.score(FINDINGS)).rejects.toMatchObject({
       code: "SCORING_MALFORMED_OUTPUT",
+      message: expect.stringContaining("no {type:\"result\""),
     });
   });
 
-  it("maps non-JSON result → SCORING_MALFORMED_OUTPUT", async () => {
+  it("maps non-JSON result → SCORING_MALFORMED_OUTPUT with a diagnosable detail", async () => {
     const spawnFn = fakeSpawn({ stdout: streamJson("not json at all") });
     const scorer = createCliScorer({ model: "m", timeoutMs: 5000, spawnFn });
     await expect(scorer.score(FINDINGS)).rejects.toMatchObject({
       code: "SCORING_MALFORMED_OUTPUT",
+      message: expect.stringContaining("JSON.parse failed"),
     });
   });
 
-  it("maps schema violation (score out of range) → SCORING_MALFORMED_OUTPUT", async () => {
+  it("maps schema violation (score out of range) → SCORING_MALFORMED_OUTPUT with a zod issue summary", async () => {
     const spawnFn = fakeSpawn({ stdout: streamJson('{"score":250,"findings":{}}') });
     const scorer = createCliScorer({ model: "m", timeoutMs: 5000, spawnFn });
     await expect(scorer.score(FINDINGS)).rejects.toBeInstanceOf(ScoringError);
+    await expect(scorer.score(FINDINGS)).rejects.toMatchObject({
+      code: "SCORING_MALFORMED_OUTPUT",
+      message: expect.stringContaining("zod validation failed"),
+    });
   });
 
   it("aborts via external signal → SCORING_TIMEOUT", async () => {
