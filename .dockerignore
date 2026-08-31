@@ -1,0 +1,36 @@
+# Build context exclusions — keep the image lean and SECRET-FREE.
+# T-06-01: no .env* (except .env.example) may enter the build context.
+
+# Secrets — exclude every .env variant, then re-include the safe template.
+.env
+.env.*
+!.env.example
+
+# VCS + planning/docs noise (irrelevant to runtime).
+.git
+.gitignore
+.planning
+
+# Dependencies — the build installs fresh inside the image (deterministic, bun.lock-pinned).
+node_modules
+**/node_modules
+
+# Build artifacts — produced inside the image, never copied from host.
+**/dist
+
+# Tests — not needed at build/runtime.
+**/*.test.ts
+**/*.spec.ts
+**/__tests__
+**/coverage
+**/.vitest
+
+# Editor / OS cruft.
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.log
+
+# NOTE: packages/db/migrations/** is intentionally NOT ignored — migrate reads
+# the .sql files package-relative at runtime.

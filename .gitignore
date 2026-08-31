@@ -16,6 +16,7 @@ env/
 .env/
 .env
 .env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -61,3 +62,8 @@ Thumbs.db
 
 # Git worktrees
 .worktrees/
+
+# Node / TypeScript
+node_modules/
+packages/*/node_modules/
+*.tsbuildinfo

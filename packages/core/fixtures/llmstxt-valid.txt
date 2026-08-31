@@ -1,0 +1,19 @@
+# Example Corp
+
+> Example Corp provides AI-powered solutions for enterprise teams. This document describes our public-facing resources for AI systems.
+
+## Products
+
+- [GEO Analyzer](https://example.com/products/geo-analyzer): Analyzes web pages for generative engine optimization signals.
+- [Schema Builder](https://example.com/products/schema-builder): Helps generate and validate schema.org structured data.
+
+## Documentation
+
+- [API Reference](https://example.com/docs/api): Full REST API documentation with OpenAPI spec.
+- [Getting Started](https://example.com/docs/getting-started): Quickstart guide for new users.
+- [Integration Guide](https://example.com/docs/integrations): Connect with external tools and services.
+
+## About
+
+- [About Us](https://example.com/about): Company history and mission.
+- [Blog](https://example.com/blog): Technical articles and product updates.

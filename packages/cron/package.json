@@ -1,0 +1,39 @@
+{
+  "name": "@geo/cron",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "bin": {
+    "geo-cron": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.1",
+    "@geo/api": "workspace:*",
+    "@geo/db": "workspace:*",
+    "@geo/fetch": "workspace:*",
+    "@types/node": "25.9.1",
+    "tsup": "8.5.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.8"
+  }
+}

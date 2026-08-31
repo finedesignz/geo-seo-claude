@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSR Page — Server-Side Rendered</title>
+  <meta name="description" content="This page is rendered server-side with full text content in the initial HTML.">
+  <link rel="canonical" href="https://example.com/ssr-page">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "SSR Page",
+    "description": "A server-side rendered page with rich content for GEO analysis."
+  }
+  </script>
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/about">About</a>
+      <a href="/blog">Blog</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Server-Side Rendered Content</h1>
+    <p>This page demonstrates server-side rendering where all content is present in the initial HTML response. Search engines and AI crawlers can immediately read the full content without executing JavaScript.</p>
+    <h2>Why SSR Matters for GEO</h2>
+    <p>Generative Engine Optimization requires that content be accessible to AI systems during the initial crawl. Server-side rendering ensures that the full text, structured data, and semantic markup are available immediately.</p>
+    <h2>Key Benefits</h2>
+    <ul>
+      <li>Content is visible to crawlers without JS execution</li>
+      <li>JSON-LD structured data is present in the HTML source</li>
+      <li>Heading hierarchy is clear and meaningful</li>
+      <li>Meta description provides a good summary</li>
+    </ul>
+    <p>Additional paragraph content to ensure word count exceeds thresholds for SSR detection heuristics. This page has substantial text content which is a strong signal that the page is server-rendered rather than client-rendered.</p>
+    <p>More content here to pad word count for reliable SSR classification. The heuristic checks text-to-HTML ratio and word count to differentiate SSR pages from CSR shells.</p>
+  </main>
+  <footer>
+    <p>Footer content — also present in SSR HTML.</p>
+  </footer>
+</body>
+</html>

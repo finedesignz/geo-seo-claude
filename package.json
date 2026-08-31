@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "workspaces": ["packages/*", "examples"],
+  "scripts": {
+    "test": "bun run --sequential --filter='*' test -- --run"
+  }
+}
