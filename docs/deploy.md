@@ -12,17 +12,22 @@ Phase 7) executes against it. **Leave UUIDs/secrets as placeholders; the operato
 ## Overview — one image, four run targets
 
 Plan 01 ships a single multi-stage `Dockerfile` (`oven/bun:1.3.1-slim`) that builds the
-whole Bun workspace. The **role is chosen by the start-command override** — there is no
-entrypoint branch script (D-01 / D-03):
+whole Bun workspace. The **role is chosen by the `GEO_ROLE` env var**, dispatched by
+`scripts/docker-entrypoint.sh` (the image `ENTRYPOINT`). This replaced the original
+start-command-override design (D-01 / D-03) because Coolify's Dockerfile build pack does
+NOT honor a per-resource custom start-command override (verified on Coolify 4.1.1 — the
+worker resource ran the image's default CMD instead). Valid `GEO_ROLE` values:
 
-| Run target | Start command (override)              | Network    | Health                                   |
-|------------|---------------------------------------|------------|------------------------------------------|
-| API        | _default CMD_ `bun packages/api/dist/main.js` | HTTP (8080) | `GET /healthz`                           |
-| Worker     | `bun packages/worker/dist/main.js`    | none       | exec `scripts/worker-healthcheck.sh` (heartbeat) |
-| Migrate    | `bun packages/db/scripts/migrate.ts`  | none       | one-shot (Pre-deployment command, below) |
-| Cron       | `bun packages/cron/dist/main.js`      | none       | one-shot (Scheduled Task, below)         |
+| Run target | `GEO_ROLE`            | Network    | Health                                   |
+|------------|-----------------------|------------|-------------------------------------------|
+| API        | `api` (default if unset) | HTTP (8080) | `GET /healthz`                        |
+| Worker     | `worker`               | none       | exec `scripts/worker-healthcheck.sh` (heartbeat) |
+| Migrate    | _n/a — separate one-shot command_, see Migrations below | none | one-shot (Pre-deployment command, below) |
+| Cron       | `cron`                 | none       | one-shot (Scheduled Task, below)         |
 
-All four run **the same image / repo / branch** — only the command and resource settings differ.
+All run **the same image / repo / branch** — only `GEO_ROLE` (and resource network/health
+settings) differ. `scripts/healthcheck.sh` also dispatches on `GEO_ROLE` for the in-image
+Docker `HEALTHCHECK`.
 
 ---
 
@@ -47,6 +52,7 @@ Enter in the Coolify UI — **never committed**. Names/defaults come from `.env.
 
 | Var                    | API | Worker | Migrate | Notes                                              |
 |------------------------|:---:|:------:|:-------:|----------------------------------------------------|
+| `GEO_ROLE`             |  ✔  |   ✔    |         | `api` (default) / `worker` / `cron` — selects the process, see Overview |
 | `DATABASE_URL`         |  ✔  |   ✔    |    ✔    | Coolify-internal Postgres URL (secret)             |
 | `SCORING_PROVIDER`     |     |   ✔    |         | `api` (default w/ key) or `cli` (Claude subscription) |
 | `ANTHROPIC_API_KEY`    |     |  ✔*    |         | scoring key (secret) — required when `SCORING_PROVIDER=api` |
@@ -74,9 +80,11 @@ prefer an `ANTHROPIC_API_KEY` for production customer audit volume (rate limits 
 
 Create **two** Application resources from the same repo/Dockerfile:
 
-- **API resource** — default CMD (no override). Expose HTTP **8080**. Set the
+- **API resource** — set env var **`GEO_ROLE=api`** (or leave unset — `api` is the
+  entrypoint's default). Expose HTTP **8080**. Set the
   **HTTP health check** to path `/healthz` (expects 200 `{"db":"ok"}`, public/auth-exempt).
-- **Worker resource** — **start command override** `bun packages/worker/dist/main.js`.
+- **Worker resource** — set env var **`GEO_ROLE=worker`**. Do NOT rely on a start-command
+  override — Coolify's Dockerfile build pack ignores it (see Overview above).
   **No HTTP port.** Set health to an **exec** check running `scripts/worker-healthcheck.sh`
   (file-based heartbeat liveness, plan 01). _Confirm in Coolify UI_ (Q2): if a per-resource
   exec health check is unavailable, fall back to **restart-on-exit** — D-06 accepts this,
