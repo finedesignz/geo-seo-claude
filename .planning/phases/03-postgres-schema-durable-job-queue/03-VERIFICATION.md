@@ -1,33 +1,58 @@
 ---
 phase: 03-postgres-schema-durable-job-queue
-verified: 2026-06-02T17:22:00Z
-status: human_needed
-score: 4/5 must-haves verified
+verified: 2026-09-12T00:00:00Z
+status: passed
+score: 14/14 must-haves verified
+covered_files:
+  - ".planning/phases/03-postgres-schema-durable-job-queue/03-00-PLAN.md"
+  - ".planning/phases/03-postgres-schema-durable-job-queue/03-00-SUMMARY.md"
+  - ".planning/phases/03-postgres-schema-durable-job-queue/03-01-PLAN.md"
+  - ".planning/phases/03-postgres-schema-durable-job-queue/03-01-SUMMARY.md"
+  - ".planning/phases/03-postgres-schema-durable-job-queue/03-02-PLAN.md"
+  - ".planning/phases/03-postgres-schema-durable-job-queue/03-02-SUMMARY.md"
+  - ".planning/phases/03-postgres-schema-durable-job-queue/03-CONTEXT.md"
+  - ".planning/phases/03-postgres-schema-durable-job-queue/03-RESEARCH.md"
+  - ".planning/phases/03-postgres-schema-durable-job-queue/03-REVIEWS.md"
+  - ".planning/phases/03-postgres-schema-durable-job-queue/03-VALIDATION.md"
+  - "packages/db/migrations/0001_create_audits.sql"
+  - "packages/db/migrations/0002_add_consumer_id.sql"
+  - "packages/db/package.json"
+  - "packages/db/scripts/migrate.ts"
+  - "packages/db/src/__tests__/client.test.ts"
+  - "packages/db/src/__tests__/concurrency.test.ts"
+  - "packages/db/src/__tests__/harness.ts"
+  - "packages/db/src/__tests__/lifecycle.test.ts"
+  - "packages/db/src/__tests__/migrate.test.ts"
+  - "packages/db/src/__tests__/queue.test.ts"
+  - "packages/db/src/__tests__/schema.test.ts"
+  - "packages/db/src/client.ts"
+  - "packages/db/src/dal.ts"
+  - "packages/db/src/index.ts"
+  - "packages/db/src/migrate.ts"
+  - "packages/db/src/types.ts"
+covered_digest: "v1:sha256:ac58e906e23a491cb19ea7f2dec908023df39a06ae169255e9320ca18fa5897c"
+behavior_unverified: 0
 overrides_applied: 0
-human_verification:
-  - test: "Run true-concurrency SKIP LOCKED test against live Coolify Postgres"
-    expected: "Two concurrent claimNextJob() calls via Promise.all return DIFFERENT row ids — zero double-claims"
-    why_human: "PGlite is single-connection; cannot prove multi-session SKIP LOCKED semantics without a real multi-connection Postgres server. Requires TEST_DATABASE_URL + ALLOW_DB_TESTS=1 pointed at Coolify. Deferred to Phase 6 DEPLOY-04 per VALIDATION.md contract."
+re_verification:
+  previous_status: human_needed
+  previous_score: 13/14
+  gaps_closed:
+    - "WORK-01 double-claim proof (truth #14) is now PROVEN in CI against a real multi-connection Postgres 16 service container. PR #8 (ci: run WORK-01 concurrency test against real Postgres in CI, head ci/postgres-concurrency-test) merged to main 2026-09-14T05:38:33Z; workflow db-postgres-concurrency run 34809832948 concluded success, and its log shows src/__tests__/concurrency.test.ts (2 tests) EXECUTED AND PASSED (no longer skipped), with the suite at Test Files 8 passed (8) / Tests 56 passed (56) -- previously 55 passed / 1 skipped under PGlite."
+  gaps_remaining: []
+  regressions: []
+human_verification: []
 ---
 
 # Phase 3: Postgres Schema & Durable Job Queue — Verification Report
 
 **Phase Goal:** Audit jobs and results are durably stored in Coolify Postgres with a versioned schema and a correct SKIP LOCKED job queue that survives service restarts.
-**Verified:** 2026-06-02T17:22:00Z
-**Status:** HUMAN_NEEDED (one proof deferred to real Postgres in Phase 6)
-**Re-verification:** No — initial verification
+**Verified:** 2026-09-12; WORK-01 gap closed 2026-09-14 (CI proof, see below)
+**Status:** PASSED (the one runtime concurrency proof is now discharged in CI against a real Postgres)
+**Re-verification:** Yes — a prior `03-VERIFICATION.md` already existed on `origin/main` (2026-06-02, status `human_needed`, score 4/5, verdict SHIP WITH NOTES). This report is an independent re-check against current `origin/main` (commit `5965cad`), not a re-statement of the prior report's claims.
 
----
+**Branch note:** The session's canonical checkout is on `phase-01-geo-core-deterministic-package`. Per instructions, this verification reads/tests only via `git show`/`git grep` against `origin/main` and a disposable detached `git worktree` (created and removed during this session) — the canonical checkout's branch was never switched.
 
-## Gate Commands Run
-
-```
-bun run --cwd packages/db test -- --run
-  → 7 files, 48 passed, 1 skipped  ✓
-
-bun run --cwd packages/db build
-  → ESM + CJS + DTS clean, no errors  ✓
-```
+**Important correction to the verification request:** `03-VERIFICATION.md` was NOT missing — it already exists and is committed on `origin/main` (`git hash-object` on the working-tree copy matches the blob on `origin/main` exactly). This report supersedes it with a fresh, independently-run check.
 
 ---
 
@@ -37,121 +62,22 @@ bun run --cwd packages/db build
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Fresh-migrate produces audits table with all required columns | ✓ VERIFIED | `0001_create_audits.sql` — all 17 D-06 columns present; `schema.test.ts` validates each column type via PGlite |
-| 2 | Job inserted as `queued` is claimable and transitions queued→running→done\|failed | ✓ VERIFIED | `lifecycle.test.ts` + `queue.test.ts` — full lifecycle exercised under PGlite; `claimNextJob` returns row with `leaseToken` UUID |
-| 3 | Killing/restarting service does not strand jobs in `running` (lease/timeout detection) | ✓ VERIFIED (partial) | `reclaimExpired()` in `dal.ts:325–340` flips expired-lease rows back to `queued`, max-attempts guard → `failed`; proven via PGlite in `queue.test.ts`. Actual restart-survival needs a persistent server (Phase 6 live test) |
-| 4 | `DATABASE_URL` never in any committed file; read from env only | ✓ VERIFIED | `client.ts:26–30` — fail-fast assert throws if env absent; `.env.example` has placeholder only; grep across repo found zero committed connection strings |
-| 5 | True concurrent SKIP LOCKED — two claimers get different rows | ? UNCERTAIN | `concurrency.test.ts` is gated behind `TEST_DATABASE_URL + ALLOW_DB_TESTS=1`; skipped with logged reason. Structural check in `queue.test.ts:246–265` asserts `FOR UPDATE SKIP LOCKED` is present inside a `sql.begin()` block (source-text assertion), but this is a code-structure proof, not a runtime concurrency proof |
+| 1 | Importing `@geo/db` with `DATABASE_URL` unset throws a fail-fast error | ✓ VERIFIED | `packages/db/src/client.ts` `getSql()` throws `"@geo/db: DATABASE_URL is required but not set..."`; `client.test.ts` asserts this; test suite green |
+| 2 | A PGlite in-process Postgres can be spun up fresh per test file, no Docker | ✓ VERIFIED | `packages/db/src/__tests__/harness.ts` `makePgliteDb()`; 8 test files all run against it with zero Docker/network dependency, confirmed by running the full suite locally |
+| 3 | `DATABASE_URL` never appears in any committed file; `.env.example` carries only a placeholder | ✓ VERIFIED | `git show origin/main:.env.example` → `DATABASE_URL=` (empty); `.gitignore` excludes `.env`/`.env.*`; repo-wide grep for `DATABASE_URL=postgres` found only `packages/api/.env.example` (fake `user:pass@localhost` placeholder, same pattern) |
+| 4 | Fresh migrate produces the `audits` table with every required column | ✓ VERIFIED | `packages/db/migrations/0001_create_audits.sql` — all 17 D-06 columns, CHECK constraints, indexes, trigger present; `schema.test.ts` passes against PGlite |
+| 5 | Running migrations twice is a no-op the second time (idempotent) | ✓ VERIFIED | `packages/db/src/migrate.ts` `runMigrations` skips versions already in `schema_migrations`; `migrate.test.ts` passes |
+| 6 | `migrate:status` lists applied migration versions | ✓ VERIFIED | `packages/db/scripts/migrate.ts` `status` subcommand calls `listApplied()` and prints each version |
+| 7 | Each migration file runs inside a transaction and rolls back on failure | ✓ VERIFIED | `migrate.ts` applies each file via `sql.begin`/transactional `exec`; failure re-throws without recording the version |
+| 8 | A job inserted `queued` is claimable via `SELECT...FOR UPDATE SKIP LOCKED` and transitions `queued→running` | ✓ VERIFIED | `packages/db/src/dal.ts` `claimNextJob` — `lifecycle.test.ts`/`queue.test.ts` pass |
+| 9 | A claimed job transitions `running→done` (`completeJob`) or `running→failed` (`failJob`) | ✓ VERIFIED | `dal.ts` `completeJob`/`failJob`, lease-token fenced; exercised in `lifecycle.test.ts` |
+| 10 | `claimNextJob` returns `null` when no queued rows remain | ✓ VERIFIED | `lifecycle.test.ts` asserts this |
+| 11 | `reclaimExpired` flips expired-lease `running` rows back to `queued`, or to `failed` at max attempts | ✓ VERIFIED | `dal.ts` `reclaimExpired` — single atomic `UPDATE...WHERE status='running' AND lease_expires_at < now()`; `queue.test.ts` passes |
+| 12 | `findRecentByUrlHash` returns a recent matching job within TTL (dedup support) | ✓ VERIFIED | `dal.ts`; `queue.test.ts` covers inside/outside-TTL cases |
+| 13 | The claim is a single transaction — `SELECT...FOR UPDATE SKIP LOCKED` then the status UPDATE, no commit gap | ✓ VERIFIED | `dal.ts` `claimNextJob` wraps both the `SELECT...FOR UPDATE SKIP LOCKED` and the subsequent `UPDATE` inside one `executor.transaction(...)` call — read directly from source, no commit boundary between them |
+| 14 | Two concurrent claimers against a real multi-connection Postgres never receive the same row (WORK-01 double-claim guarantee) | ✓ VERIFIED (CI, 2026-09-14) | `concurrency.test.ts` now runs for real in CI: the `db-postgres-concurrency` workflow stands up a Postgres 16 service container, sets `ALLOW_DB_TESTS=1` plus a real `TEST_DATABASE_URL`, and run [34809832948](https://github.com/finedesignz/geo-seo-claude/actions/runs/34809832948) concluded `success` with log line `src/__tests__/concurrency.test.ts (2 tests)` -- executed, not skipped. Shipped by PR [#8](https://github.com/finedesignz/geo-seo-claude/pull/8), merged to `main` 2026-09-14T05:38:33Z. |
 
-**Score:** 4/5 truths verified (1 deferred by design)
-
----
-
-## Requirement Coverage
-
-### DATA-01 — Audits schema: all D-06 columns present
-
-**PASS**
-
-`packages/db/migrations/0001_create_audits.sql` (lines 15–36):
-
-All 17 columns confirmed present:
-- `id uuid PRIMARY KEY DEFAULT gen_random_uuid()`
-- `url text NOT NULL`, `normalized_url text NOT NULL`, `url_hash text NOT NULL`
-- `status text NOT NULL DEFAULT 'queued'` with CHECK constraint `IN ('queued','running','done','failed')`
-- `score int` with CHECK `(score IS NULL OR (score >= 0 AND score <= 100))`
-- `findings jsonb`, `error_code text`, `callback_url text`
-- `attempts int NOT NULL DEFAULT 0`
-- `locked_at timestamptz`, `lease_expires_at timestamptz`, **`lease_token uuid`** (D-06 fencing token)
-- `created_at timestamptz NOT NULL DEFAULT now()`, `updated_at timestamptz NOT NULL DEFAULT now()`
-- `started_at timestamptz`, `finished_at timestamptz`
-
-Indexes (dal.ts D-07):
-- `idx_audits_queued ON (created_at, id) WHERE status='queued'` — partial index on claim path ✓
-- `idx_audits_running_expired ON (lease_expires_at) WHERE status='running'` — reclaim path ✓
-- `idx_audits_url_hash ON (url_hash)` — dedup ✓
-
-`updated_at` trigger `audits_updated_at` installed ✓
-
-`schema.test.ts` validates all column types against live PGlite — 48 tests green.
-
----
-
-### DATA-02 — Durable state machine; survives restart
-
-**PASS (with Phase 6 live caveat)**
-
-State machine `queued → running → done | failed` is persisted in Postgres SQL — not in-memory. All transitions implemented in `dal.ts`:
-- `insertJob` → status='queued'
-- `claimNextJob` → status='running', `lease_token=gen_random_uuid()`, `attempts++`
-- `completeJob` → status='done', clears lease columns
-- `failJob` → status='failed', clears lease columns
-- `reclaimExpired` → expired-lease `running` rows → back to `queued` (or `failed` at max attempts)
-
-All exercised via PGlite in `lifecycle.test.ts` and `queue.test.ts`.
-
-Actual multi-process restart survival is a Phase 6 concern (needs persistent server); the SQL logic proves state is durable by nature of being in Postgres.
-
----
-
-### DATA-03 — `DATABASE_URL` env-only, never committed
-
-**PASS**
-
-- `packages/db/src/client.ts:19–34` — `assertDatabaseUrl()` throws `Error` with message directing to `.env.example` if env is absent
-- `.env.example` line 3: `DATABASE_URL=` (placeholder, no value)
-- `grep -r "DATABASE_URL=postgres"` across entire repo → **zero matches**
-- `.gitignore` at root excludes `.env`
-
----
-
-### DATA-04 — Versioned SQL migrations + advisory-locked runner + `schema_migrations` table; repeatable on fresh DB
-
-**PASS**
-
-`packages/db/src/migrate.ts`:
-- `schema_migrations` table created if not exists (line ~40)
-- `pg_advisory_lock(ADVISORY_LOCK_KEY)` acquired before checking/applying pending migrations (line 78); caught with warning log if PGlite doesn't support it (line 83) — graceful degradation documented
-- Each migration applied in a transaction; version recorded in `schema_migrations`
-- Idempotency: already-applied migrations skipped by checking `schema_migrations`
-- Re-run on fresh DB: proven by `migrate.test.ts` under PGlite
-
-`migrations/0001_create_audits.sql` uses `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, `CREATE INDEX IF NOT EXISTS` — idempotent SQL ✓
-
----
-
-### WORK-01 — SKIP LOCKED claim: single-txn SELECT…FOR UPDATE SKIP LOCKED + atomic state update; reclaimExpired; lease fencing
-
-**PARTIAL** (structural proof only; runtime concurrency proof deferred)
-
-`packages/db/src/dal.ts`:
-
-**claimNextJob (lines 169–210):**
-```sql
--- Inside sql.begin():
--- Step A: reclaimExpired() called first
--- Step B: SELECT ... FROM audits WHERE status='queued' ORDER BY created_at, id
---         FOR UPDATE SKIP LOCKED LIMIT 1
--- Step C: UPDATE audits SET status='running', lease_token=gen_random_uuid(),
---         locked_at=now(), lease_expires_at=now()+(secs*interval), started_at=now(),
---         attempts=attempts+1 WHERE id=$1 RETURNING *
-```
-Single transaction confirmed — all steps inside `sql.begin()`.
-
-**completeJob (line 214–236):**
-`WHERE id=$1 AND status='running' AND lease_token=$2::uuid` — lease fencing ✓
-Returns `false` on zero rows (stale token rejected) ✓
-
-**failJob (line 239–255):**
-Same `AND lease_token=$2::uuid` fence ✓
-
-**renewLease (line 261–272):**
-Same `AND lease_token=$2::uuid` fence ✓
-
-**reclaimExpired (lines 315–340):**
-`WHERE status='running' AND lease_expires_at < now()` — max-attempts guard → `failed`, else → `queued`, clears lease columns ✓
-
-**What is NOT proven at runtime:** Two simultaneous claimers receiving different rows. `concurrency.test.ts` is correctly skipped-with-reason. `queue.test.ts:246–265` does a source-text assertion that `FOR UPDATE SKIP LOCKED` appears inside a `sql.begin()` block — this confirms code structure but not runtime semantics. Per VALIDATION.md, this is explicitly deferred to Phase 6 DEPLOY-04.
+**Score:** 14/14 truths verified
 
 ---
 
@@ -159,52 +85,103 @@ Same `AND lease_token=$2::uuid` fence ✓
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `packages/db/src/index.ts` | All DAL exports | ✓ VERIFIED | Exports: `getSql`, `runMigrations`, `listApplied`, all types, `createAuditDal`, `getDefaultDal`, `makePgExecutor` |
-| `packages/db/src/dal.ts` | 9 DAL functions (D-10) | ✓ VERIFIED | `insertJob`, `claimNextJob`, `completeJob`, `failJob`, `renewLease`, `getJob`, `listJobs`, `findRecentByUrlHash`, `reclaimExpired` |
-| `packages/db/src/migrate.ts` | Advisory-locked idempotent runner | ✓ VERIFIED | pg_advisory_lock + schema_migrations + per-file transactions |
-| `packages/db/migrations/0001_create_audits.sql` | All D-06 columns | ✓ VERIFIED | 17 columns, CHECK constraint, 3 indexes, trigger |
-| `packages/db/src/client.ts` | DATABASE_URL fail-fast guard | ✓ VERIFIED | assertDatabaseUrl() throws on missing env |
-| `.env.example` | DATABASE_URL placeholder | ✓ VERIFIED | Placeholder only, no real value |
-| `packages/db/src/__tests__/concurrency.test.ts` | Gated, skipped-with-reason | ✓ VERIFIED | describeIfRealDb + console.log skip reason + deferral to Phase 6 DEPLOY-04 |
-| `packages/db/dist/` | ESM + CJS + DTS build | ✓ VERIFIED | tsup clean, all three artifacts produced |
+| `packages/db/package.json` | `@geo/db` workspace package | ✓ VERIFIED | builds, links as workspace dep of `api`/`worker`/`cron` |
+| `packages/db/src/client.ts` | postgres.js client + fail-fast guard | ✓ VERIFIED | `getSql()` throws on missing env, never logs the value |
+| `packages/db/src/__tests__/harness.ts` | PGlite fresh-db factory + real-DB gate | ✓ VERIFIED | `makePgliteDb`, `hasRealDb`, `describeIfRealDb` all present and used |
+| `.env.example` | `DATABASE_URL` placeholder | ✓ VERIFIED | placeholder only |
+| `packages/db/migrations/0001_create_audits.sql` | full audits schema | ✓ VERIFIED | 17 columns, CHECK constraints, 3 indexes, trigger |
+| `packages/db/src/migrate.ts` | idempotent advisory-locked runner | ✓ VERIFIED | `pg_advisory_lock` (best-effort under PGlite) + `schema_migrations` + per-file transaction |
+| `packages/db/scripts/migrate.ts` | CLI entrypoint (apply + status) | ✓ VERIFIED | dedicated `max:1` connection (fixes the pool/manual-transaction conflict — see commit `11076ef`) |
+| `packages/db/src/dal.ts` | 8+ DAL functions, `SKIP LOCKED` | ✓ VERIFIED | `insertJob`, `claimNextJob`, `completeJob`, `failJob`, `requeueJob`, `renewLease`, `getJob`, `listJobs`, `findRecentByUrlHash`, `reclaimExpired`, `ping` — evolved beyond the original 8 by later phases (lease-token fencing, `consumer_id`, `requeueJob` added in Phase 4/5), but all Phase 3 guarantees still hold and are still tested |
+| `packages/db/src/types.ts` | typed contract | ✓ VERIFIED | `AuditStatus`, `AuditJob`, `FindingsShape` (imports `@geo/core`, not re-declared) |
+| `packages/db/src/index.ts` | public re-exports | ✓ VERIFIED | re-exports client/migrate/types/DAL |
 
 ---
 
-## Anti-Patterns
+## Key Link Verification
 
-None found. No TBD/FIXME/XXX markers, no stub implementations, no hardcoded empty returns in production code paths.
+| From | To | Via | Status | Details |
+|------|-----|-----|--------|---------|
+| `packages/db/src/client.ts` | `process.env.DATABASE_URL` | fail-fast guard | ✓ WIRED | Direct `process.env["DATABASE_URL"]` read, throws if absent |
+| `packages/db/src/migrate.ts` | `packages/db/migrations/*.sql` | `readdir` + sorted apply inside `exec`/transaction | ✓ WIRED | Confirmed reading `migrate.ts` source |
+| `packages/db/src/dal.ts claimNextJob` | audits row lock | `SELECT...FOR UPDATE SKIP LOCKED` then `UPDATE` in one `transaction()` call | ✓ WIRED | Confirmed by direct source read |
+| `packages/db` (package) | `packages/api`, `packages/worker`, `packages/cron` | `"@geo/db": "workspace:*"` + real imports | ✓ WIRED | Not orphaned — `@geo/db` is imported by `packages/worker/src/{pipeline,main,scorer,cli-scorer}.ts`, `packages/api/src/{app,main,middleware/auth,routes/healthz}.ts`, and `packages/cron` tests |
 
-The advisory lock has a documented graceful-degradation path (PGlite compatibility) — this is intentional and noted, not a bug.
+---
+
+## Behavioral Spot-Checks / Test Run
+
+Ran directly (not trusted from SUMMARY.md) in a disposable detached `git worktree` checked out to `origin/main` (`5965cad`), never touching the canonical checkout's branch:
+
+```
+bun install                                    → 230 packages installed
+bun run --cwd packages/db test -- --run        → 8 test files, 55 passed, 1 skipped (56 total)
+bun run --cwd packages/core build              → ESM+CJS+DTS clean (build-order dependency: @geo/core must build before @geo/db's DTS step, expected monorepo ordering, not a Phase 3 defect)
+bun run --cwd packages/db build                → ESM+CJS+DTS clean once @geo/core is built
+git grep -n "DATABASE_URL=postgres" (repo-wide) → only .env.example placeholders (fake creds)
+grep TBD/FIXME/XXX/TODO/HACK/PLACEHOLDER in packages/db/**                    → none found
+```
+
+The 1 skipped test in that local PGlite run was `concurrency.test.ts`, correctly gated behind `DATABASE_URL`/`ALLOW_DB_TESTS=1` with a logged skip reason.
+
+**Update 2026-09-14 -- that skip is now closed in CI.** The `db-postgres-concurrency` GitHub Actions workflow (added by PR #8, merged to `main` 2026-09-14T05:38:33Z) runs the same suite against a real Postgres 16 service container. Run `34809832948` concluded `success`:
+
+```
+✓ src/__tests__/concurrency.test.ts (2 tests) 161ms
+ Test Files  8 passed (8)
+      Tests  56 passed (56)
+```
+
+56/56 with zero skips -- `concurrency.test.ts` executed and passed against real multi-connection Postgres, discharging WORK-01's double-claim guarantee.
+
+---
+
+## Requirements Coverage
+
+| Requirement | Source Plan | Description | Status | Evidence |
+|---|---|---|---|---|
+| DATA-01 | 03-01, 03-02 | Audits schema, all D-06 columns present | ✓ SATISFIED | `0001_create_audits.sql` + `schema.test.ts` |
+| DATA-02 | 03-02 | Durable `queued→running→done\|failed` state machine | ✓ SATISFIED | `dal.ts` state transitions, PGlite-tested |
+| DATA-03 | 03-00 | `DATABASE_URL` env-only, never committed | ✓ SATISFIED | `client.ts` fail-fast guard, `.env.example` placeholder, `.gitignore` |
+| DATA-04 | 03-01 | Versioned, idempotent, advisory-locked migrations | ✓ SATISFIED | `migrate.ts` + `migrate.test.ts` |
+| WORK-01 | 03-02 | SKIP LOCKED claim, no double-claim under real concurrency | ✓ SATISFIED (PROVEN) | Structure verified by source read; runtime double-claim proof now executed in CI against a real Postgres 16 service container -- PR #8 merged to `main` 2026-09-14, workflow run 34809832948 `success`, `concurrency.test.ts` 2 tests executed and passed (56/56, 0 skipped). No longer deferred-live. |
+
+No orphaned requirements found for Phase 3.
+
+---
+
+## Anti-Patterns Found
+
+None. No `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` markers, no stub returns, no hardcoded empty implementations in any Phase 3 file. The `pg_advisory_lock` PGlite-unsupported fallback is a documented, intentional graceful-degradation path (logged warning), not a silent stub.
 
 ---
 
 ## Human Verification Required
 
-### 1. True SKIP LOCKED Concurrency Proof
-
-**Test:** Point a real Postgres DB at `TEST_DATABASE_URL`, set `ALLOW_DB_TESTS=1`, run `bun run --cwd packages/db test -- --run`. The `concurrency.test.ts` suite should activate.
-
-**Expected:** `Promise.all([dal.claimNextJob(), dal.claimNextJob()])` with 2 seeded rows returns two different `id` values — zero double-claims.
-
-**Why human:** PGlite is single-connection and cannot simulate two concurrent sessions holding locks. Needs a real multi-connection Postgres. Deferred to Phase 6 DEPLOY-04 per VALIDATION.md contract and documented in 03-00-SUMMARY.md.
+**None.** The single prior item (WORK-01's true SKIP LOCKED concurrency proof) was discharged
+on 2026-09-14 by the `db-postgres-concurrency` CI workflow rather than by a manual operator
+run. PR #8 (`ci: run WORK-01 concurrency test against real Postgres in CI`) merged to `main`
+at 2026-09-14T05:38:33Z; workflow run
+https://github.com/finedesignz/geo-seo-claude/actions/runs/34809832948 concluded `success`
+with `concurrency.test.ts` executing 2 tests against a real Postgres 16 service container
+(`Tests 56 passed (56)`, zero skipped). The proof is now a repeatable CI artifact, not a
+one-off manual run, so it cannot silently regress.
 
 ---
 
 ## Gaps Summary
 
-No blocking gaps. The one deferred item (true-concurrency SKIP LOCKED proof) is intentional, documented in VALIDATION.md, and has a clear Phase 6 resolution path. The code structure proof (source-text assertion in `queue.test.ts`) confirms the claim query is structurally correct.
+No gaps. All 14 Phase 3 must-haves are verified with evidence from a live test run (55/56 tests green) against the current `origin/main` state, not from trusting `SUMMARY.md`. `@geo/db` is genuinely wired into `packages/worker`, `packages/api`, and `packages/cron` — not an orphaned package. The previously-open item (truth #14, WORK-01's full concurrency proof) is CLOSED as of 2026-09-14: it now runs on every CI invocation of the `db-postgres-concurrency` workflow against a real Postgres, and passed on run 34809832948.
 
 ---
 
 ## SHIP VERDICT
 
-**SHIP WITH NOTES**
+**SHIP (already shipped) -- NO OUTSTANDING ITEMS**
 
-All automated gates pass (48/49 tests green, 1 skipped-with-reason; build clean). All D-06 columns present. State machine proven via PGlite. Lease fencing on all terminal/renewal operations. DATABASE_URL never committed. Advisory-locked migration runner idempotent.
-
-The single open item — runtime SKIP LOCKED concurrency proof — is correctly gated and deferred to Phase 6 by explicit design contract in VALIDATION.md. Phase 4 (Worker Pipeline) can safely build on this package; the structural correctness of the claim query is verified, and the concurrency guarantee will be closed at deploy time.
+Phase 3's goal — durable Postgres-backed audit schema + versioned migrations + a structurally correct SKIP LOCKED job queue with lease fencing and reclaim — is achieved and independently confirmed against `origin/main` via a real test run (not SUMMARY-trusted). This phase has already progressed through Phase 4 (worker), Phase 5 (API), Phase 6 (live Coolify deploy), and Phase 7, and per project memory the v1.0 milestone has since shipped to production with audits returning real scores end-to-end — strong indirect evidence the queue works under real load. The last formal gap -- no artifact proving the two-claimer double-claim race against a real multi-connection Postgres -- was closed on 2026-09-14 by PR #8, which added the `db-postgres-concurrency` CI workflow (Postgres 16 service container, `ALLOW_DB_TESTS=1`, real `TEST_DATABASE_URL`). Run 34809832948 concluded `success` with `concurrency.test.ts` executing 2 tests and the full suite at 56/56, zero skipped. WORK-01 is PROVEN, and the proof is now enforced on every run of that workflow rather than resting on a one-off manual execution.
 
 ---
 
-_Verified: 2026-06-02T17:22:00Z_
-_Verifier: Claude (gsd-verifier) — independent, not the Phase 3 executor_
+_Verified: 2026-09-12; WORK-01 closed 2026-09-14_
+_Verifier: Claude (independent re-verification against origin/main `5965cad`; canonical checkout branch never switched. 2026-09-14 update: WORK-01 discharged by CI run 34809832948 on PR #8, read-only check via `gh run view`.)_
