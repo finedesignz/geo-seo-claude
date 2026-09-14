@@ -52,21 +52,22 @@ describeIfRealDb("WORK-01: true concurrent claimNextJob — no double-claim", ()
     // Migrate fresh schema. runMigrations issues raw BEGIN/COMMIT/ROLLBACK,
     // which postgres.js refuses on a pooled (max > 1) connection
     // ("UNSAFE_TRANSACTION: Only use sql.begin, sql.reserved or max: 1").
-    // Run it over a single reserved connection, then release it back to the
-    // pool so the concurrency assertions below still exercise real
-    // multi-connection SKIP LOCKED behaviour via `sql` (max: 5).
-    const migrationConn = await sql.reserved();
+    // Run it over a dedicated single (max: 1) connection — same pattern as
+    // packages/db/scripts/migrate.ts — then close it, so the concurrency
+    // assertions below still exercise real multi-connection SKIP LOCKED
+    // behaviour via `sql` (max: 5).
+    const migrationSql = postgres(url, { max: 1 });
     try {
       await runMigrations(
         {
-          exec: (s: string) => migrationConn.unsafe(s),
+          exec: (s: string) => migrationSql.unsafe(s),
           query: <T extends Record<string, unknown>>(s: string, p?: unknown[]) =>
-            migrationConn.unsafe(s, p ?? []) as Promise<T[]>,
+            migrationSql.unsafe(s, p ?? []) as Promise<T[]>,
         },
         MIGRATIONS_DIR,
       );
     } finally {
-      migrationConn.release();
+      await migrationSql.end();
     }
   });
 
