@@ -1,91 +1,205 @@
 ---
 phase: 06-containerize-coolify-deploy
-verified: 2026-06-04T20:20:00Z
-status: human_needed
-score: 7/7 must-haves verified (3/4 roadmap SC PASS, 1 DEFERRED-LIVE behind human gate)
-verdict: SHIP WITH NOTES
-re_verification: No — initial verification
+verified: 2026-09-12T00:00:00Z
+status: gaps_found
+score: 7/8 must-haves verified (1 doc-drift blocker remains; DEPLOY-04 resolved 2026-09-14)
+covered_files:
+  - ".dockerignore"
+  - ".env.example"
+  - ".planning/milestones/v1.0-REQUIREMENTS.md"
+  - ".planning/phases/06-containerize-coolify-deploy/06-01-PLAN.md"
+  - ".planning/phases/06-containerize-coolify-deploy/06-01-SUMMARY.md"
+  - ".planning/phases/06-containerize-coolify-deploy/06-02-PLAN.md"
+  - ".planning/phases/06-containerize-coolify-deploy/06-02-SUMMARY.md"
+  - ".planning/phases/06-containerize-coolify-deploy/06-03-PLAN.md"
+  - ".planning/phases/06-containerize-coolify-deploy/06-03-SUMMARY.md"
+  - ".planning/phases/06-containerize-coolify-deploy/DEPLOY-RECORD.md"
+  - "Dockerfile"
+  - "docs/deploy.md"
+  - "packages/worker/src/worker.ts"
+  - "scripts/deploy-verify.sh"
+  - "scripts/docker-entrypoint.sh"
+  - "scripts/healthcheck.sh"
+  - "scripts/worker-healthcheck.sh"
+covered_digest: "v1:sha256:016cc685e2b8c288b282bd7aa664ee409dbad0a84b4262e87e46e686d19f640f"
+re_verification: No — this is the first verification against the actual post-live-deploy
+  state. A prior 06-VERIFICATION.md exists (dated 2026-06-04, status human_needed,
+  written BEFORE the live deploy on 2026-06-07) and is superseded by this report.
+gaps:
+  - truth: "docs/deploy.md accurately documents how a Coolify resource is put into worker/cron role"
+    status: failed
+    reason: >
+      docs/deploy.md:15 states "The role is chosen by the start-command override —
+      there is no entrypoint branch script." This is factually false against the
+      current Dockerfile. Commit c2e1c39 ("fix(docker): GEO_ROLE entrypoint dispatch
+      (Coolify ignores Dockerfile start-command override)") replaced the CMD-based
+      role selection with scripts/docker-entrypoint.sh, which dispatches on the
+      GEO_ROLE env var (default "api") — because Coolify's Dockerfile build pack does
+      not honor a per-resource start-command override (documented in the Dockerfile's
+      own comment, line ~9). If an operator follows the current runbook to stand up a
+      new/replacement worker resource by setting a start-command override (as
+      docs/deploy.md:79 instructs) and does NOT also set GEO_ROLE=worker, the
+      resulting container silently runs as GEO_ROLE=api (the default) instead of the
+      worker — a second API instance would come up where a worker was intended, with
+      no queue consumer running. The currently-live worker (uuid b1226r7ny7ic0sl1kdpkmi60)
+      works today only because it happens to have GEO_ROLE set out-of-band, undocumented.
+    artifacts:
+      - path: "docs/deploy.md"
+        issue: "Lines 12-20, 77-79: describes role-by-start-command-override, which the Dockerfile itself documents as non-functional on Coolify. No mention of GEO_ROLE anywhere in the file."
+      - path: ".env.example"
+        issue: "Does not list GEO_ROLE, the actual env var scripts/docker-entrypoint.sh reads to select api/worker/cron — violates 06-01-PLAN's own must-have truth '.env.example documents every runtime env var the code actually reads'."
+    missing:
+      - "Update docs/deploy.md's role-selection table/section to instruct setting GEO_ROLE=worker / GEO_ROLE=cron per resource (in addition to, or instead of, the now-inert start-command-override instructions)."
+      - "Add GEO_ROLE to .env.example with its three valid values and default."
+  - truth: "Coolify service passes a real authed POST /audit round-trip to done with numeric score + findings (roadmap SC #2, DEPLOY-04)"
+    status: resolved
+    resolved_on: "2026-09-14"
+    reason: >
+      SUPERSEDED BY EVIDENCE. The 2026-09-12 finding above rested entirely on
+      DEPLOY-RECORD.md's 2026-07-29 snapshot ("CLAUDE_CODE_OAUTH_TOKEN is unset"),
+      which no verifier had re-checked against live state because no Coolify tooling
+      was available in that pass. A 2026-09-14 read-only re-check with live Coolify
+      API access disproves it:
+      (1) The worker application b1226r7ny7ic0sl1kdpkmi60 DOES carry a
+          CLAUDE_CODE_OAUTH_TOKEN env var (key name only; value not read into any
+          report), created 2026-07-31T00:34:12Z -- two days AFTER the DEPLOY-RECORD
+          snapshot that declared it missing. The inert ANTHROPIC_API_KEY var that
+          DEPLOY-RECORD flagged for removal is also gone from the worker env.
+      (2) Live GET /audits on the deployed API with the dashboard bearer returns 20
+          jobs: 10 done, 10 failed. The failures all predate 2026-07-31T01:20Z; the
+          FIRST job ever to reach done is bd38d162-bbc0-4dd3-a8df-00469c7e9760
+          (https://example.com/, score 26) at 2026-07-31T01:20:05Z -- 46 minutes
+          after the OAuth token was added. Every SCORING_API_ERROR-era failure is on
+          the other side of that line. That is a direct causal match.
+      (3) Ten jobs have since reached done with real numeric scores on real URLs,
+          the most recent on 2026-09-07 (rfc-editor.org/rfc/rfc9110.html score 35;
+          developer.mozilla.org/en-US/docs/Web/HTTP score 34) and 2026-09-01
+          (httpbin.org/html score 31).
+      (4) GET /audit/12b91fe5-0baa-4bfb-a208-588ad20ba96e (dashboard bearer) returns
+          200 {"status":"done","score":35,"findings":[5 items]} -- the exact shape
+          DEPLOY-04 requires (status done + numeric score + findings).
+      (5) Re-confirmed live the same day: GET /healthz -> 200 {"status":"ok","db":"ok"};
+          unauthenticated POST /audit -> 401.
+      DEPLOY-04 is therefore SATISFIED in production. The only thing never exercised
+      is scripts/deploy-verify.sh as a single scripted invocation -- but every
+      assertion that script makes has now been observed individually against the live
+      service, so the requirement's substance is met. The 2026-09-12 "NOT SAT" reading
+      and the "[~] PARTIAL (DL)" marking PR #7 applied to
+      .planning/milestones/v1.0-REQUIREMENTS.md:57 are both corrected by this pass.
+    artifacts: []
+    missing: []
+deferred: []
 human_verification:
-  - test: "Operator provisions Coolify app + Postgres, enters secrets, deploys both resources, runs scripts/deploy-verify.sh against the live API origin"
-    expected: "deploy-verify.sh exits 0: /healthz 200 db:ok → /openapi.json + /docs 200 → unauth POST /audit 401 → authed POST /audit returns job_id → GET /audit/{id} reaches done"
-    why_human: "No Coolify app/Postgres provisioned; deploy branch unpushed (third-party origin, needs auth); secrets absent. Standing up prod infra + live Anthropic key is operator-owned/irreversible. Documented DEFERRED-LIVE gate (DEPLOY-RECORD.md), becomes Phase-7 precondition."
-  - test: "Confirm worker container stop grace >= SHUTDOWN_GRACE_MS (30s) and a redeploy mid-audit loses no queued/in-flight jobs"
-    expected: "Worker drains in-flight on SIGTERM within grace; any unfinished job keeps its row and is reclaimed by next worker after lease expiry — no data loss (roadmap SC #4)"
-    why_human: "Requires a live Coolify resource to set stop-grace UI field and exercise a real redeploy"
-deferred:
-  - truth: "Coolify service starts, passes live /healthz, completes real POST /audit round-trip (roadmap SC #2)"
-    addressed_in: "Phase 7 (live deploy = Phase-7 precondition per DEPLOY-RECORD.md / 06-03-PLAN gate-deferred)"
-    evidence: "DEPLOY-04 mapped to Phase 7 live acceptance; DEPLOY-02 cron explicitly Phase 7 in REQUIREMENTS.md:137"
+  - test: "RESOLVED 2026-09-14 -- the `claude setup-token` operator step was already performed on 2026-07-31 (worker env gained CLAUDE_CODE_OAUTH_TOKEN at 00:34:12Z) and live audits have been reaching `done` with real scores ever since. No operator action outstanding for DEPLOY-04."
+    expected: "n/a -- discharged by live read-only evidence, see the resolved gap above"
+    why_human: "n/a"
+  - test: "Trigger a live worker redeploy while a job is queued/in-flight and confirm the container stop grace (>= SHUTDOWN_GRACE_MS, 30s default) lets the worker drain, and any unfinished job is reclaimed by lease expiry with no data loss"
+    expected: "No row lost; in-flight job either completes before SIGTERM+grace elapses or is picked back up by the next worker after LEASE_TTL_SECONDS"
+    why_human: "Requires exercising an actual live Coolify redeploy mid-audit — cannot be verified from static code alone, and would be a live-state-mutating action outside this verifier's read-only mandate."
 ---
 
 # Phase 6: Containerize & Coolify Deploy — Verification Report
 
 **Phase Goal:** API + worker ship as a container image deployed on Coolify with all secrets from env, verified by a live /healthz + audit round-trip.
-**Verified:** 2026-06-04
-**Status:** human_needed (live deploy gated)
-**Verdict:** SHIP WITH NOTES — all containerization + deploy-readiness + verify tooling PASS; the live round-trip is a legitimate operator-gated DEFERRED-LIVE item, not a gap.
+**Verified:** 2026-09-12; DEPLOY-04 re-checked and RESOLVED 2026-09-14 (live Coolify + live API, read-only)
+**Status:** gaps_found
+**Verdict:** DO NOT SHIP AS-IS ON DOCS -- the container image, its role-dispatch mechanism, and the live infra are functioning correctly today, and as of the 2026-09-14 re-check the phase's headline live acceptance criterion (an authed audit reaching `done` with a numeric score and findings) IS demonstrated in production. The one remaining defect is the operator-facing runbook (`docs/deploy.md`), which documents a role-selection mechanism that no longer exists in the Dockerfile. That is a doc-only fix; it does not re-open the container-build work.
+
+**Note on branch:** This repo's `main` is the unrelated upstream OSS "geo-seo-claude" project (fetched from a third-party remote, `upstream/main`); this fork's own `origin/main` mirrors it. All GEO-audit-service work — including everything in this phase — lives on `phase-01-geo-core-deterministic-package`, which is also the exact branch DEPLOY-RECORD.md confirms Coolify deploys from. Verification below is against that branch (current checkout, clean, matches `origin`), not `main`, since `main` contains none of this phase's artifacts.
 
 ## Roadmap Success Criteria
 
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
-| 1 | `docker build` → single image, run API or worker mode via env/command flag | ✓ PASS | `Dockerfile:16-66` multi-stage deps→build→runtime; default `CMD ["bun","packages/api/dist/main.js"]`; worker/migrate by start-cmd override (`docs/deploy.md:18-24`). No entrypoint branch script. |
-| 2 | Coolify service starts, passes live /healthz, real POST /audit round-trip | ⏸ DEFERRED-LIVE | Tooling complete (`scripts/deploy-verify.sh`); no live URL. Operator gate per `DEPLOY-RECORD.md`. healthz route returns 200 `{db:ok}` / 503 `{db:error}` (`healthz.ts:16,48,50`). |
-| 3 | No secret in image or any committed file | ✓ PASS | `.dockerignore:5-7` excludes `.env`/`.env.*`, keeps `!.env.example`; `.git`, `.planning`, `node_modules`, `dist`, tests excluded. `git ls-files`: no `.env` tracked. Secret scan: only fake `user:pass@localhost` test fixtures. `.env.example` has names, no values. |
-| 4 | Redeploy does not lose in-flight/queued jobs | ⏸ DEFERRED-LIVE (design PASS) | Jobs durable in Postgres (lease+reclaim, Phase 3/4); worker SIGTERM drain ≤ SHUTDOWN_GRACE_MS; `docs/deploy.md:141-147` requires stop grace ≥ grace. Live redeploy proof gated. |
+| 1 | `docker build` -> single image, run API or worker mode via env/command flag | ✓ PASS | One image; role now selected by the `GEO_ROLE` env var (`scripts/docker-entrypoint.sh:16-20`) — `api` (default) / `worker` / `cron`. Mechanism changed from the original command-override design (Coolify doesn't honor per-resource start-command overrides — Dockerfile:9-10 comment, commit `c2e1c39`) but the "run via env flag" half of the criterion holds. |
+| 2 | Coolify service starts, passes live /healthz, real POST /audit round-trip | ✓ PASS (corrected 2026-09-14) | Live-curled 2026-09-12: `GET /healthz` -> 200 `{"status":"ok","db":"ok"}`; `/openapi.json` -> 200; `/docs` -> 200; unauth `POST /audit` -> 401. Matches DEPLOY-RECORD.md's 2026-07-29 snapshot. **Correction 2026-09-14:** the authed round-trip DOES succeed. `GET /audit/12b91fe5-...` returns `{"status":"done","score":35,"findings":[5]}`; `GET /audits` shows 10 completed scored jobs, the latest 2026-09-07 (scores 35, 34). The worker gained `CLAUDE_CODE_OAUTH_TOKEN` on 2026-07-31T00:34:12Z and the first-ever `done` job landed 46 minutes later. The 2026-09-12 reading was based on a stale DEPLOY-RECORD snapshot, not on live state. |
+| 3 | No secret in image or any committed file | ✓ PASS | `.dockerignore` excludes `.env`/`.env.*`, keeps `!.env.example`; `git ls-files` shows no tracked `.env`; `git grep` for `ANTHROPIC_API_KEY *=` hits only the research doc's placeholder comment, not a real value. |
+| 4 | Redeploy does not lose in-flight/queued jobs | ⚠️ DESIGN-ONLY | Durable Postgres job queue with lease+reclaim (Phase 3/4) + worker SIGTERM drain up to `SHUTDOWN_GRACE_MS`; `docs/deploy.md` requires stop-grace >= grace. No live redeploy-under-load has ever been exercised to confirm. |
 
 ## Requirements Coverage
 
-| Req | Description | Status | Evidence |
-|-----|-------------|--------|----------|
-| DEPLOY-01 | Image ships API + worker as separate Coolify services | ✓ PASS | One image, two resources off same image (`docs/deploy.md:60-70`); role by start-cmd. |
-| DEPLOY-03 | Secrets from Coolify env, none baked | ✓ PASS | `.dockerignore` + `.env.example` (names only) + per-resource env table (`docs/deploy.md:42-58`). |
-| DEPLOY-04 | Verify via /healthz + real /audit round-trip (not /health alone) | ⏸ DEFERRED-LIVE | `scripts/deploy-verify.sh` exercises full round-trip; live run = operator step 8. |
-| DEPLOY-02 | Cron re-audit container | ⏸ DEFERRED | Explicitly Phase 7 (`REQUIREMENTS.md:137`). Out of Phase 6 scope. |
+| Requirement | Description | Status | Evidence |
+|---|---|---|---|
+| DEPLOY-01 | Image ships API + worker as separate Coolify services, role by command/env | ⚠️ PARTIAL | Live services ARE separate and correctly configured (confirmed via DEPLOY-RECORD.md UUIDs + live healthz). The *documented* mechanism for achieving this (`docs/deploy.md`) is stale/wrong — see gap below. Functionally live-correct, documentation-incorrect. |
+| DEPLOY-03 | Secrets from Coolify env, none baked | ✓ PASS | Confirmed via `.dockerignore` + `.env.example` (names only, no values) + no tracked `.env`. |
+| DEPLOY-04 | Verify via /healthz + real /audit round-trip (not /health alone) | ✓ SATISFIED (corrected 2026-09-14) | Every assertion `scripts/deploy-verify.sh` makes has been observed live and read-only: `/healthz` 200 `{"status":"ok","db":"ok"}`, `/openapi.json` 200, `/docs` 200, unauth `POST /audit` 401, and an authed `GET /audit/{id}` returning `done` + numeric score + findings. 10 real scored audits in history, latest 2026-09-07. The `v1.0-REQUIREMENTS.md:57` `[~] PARTIAL (DL)` marking applied by PR #7 is reverted to SAT by this pass. |
+| DEPLOY-02 | Cron re-audit container | N/A this phase | Explicitly Phase 7 scope per `REQUIREMENTS.md` history; `GEO_ROLE=cron` path exists in the image but scheduling/wiring is Phase 7. |
 
-## Artifact Verification (exists / substantive / wired / data-flow)
+## Artifact Verification
 
 | Artifact | Status | Detail |
-|----------|--------|--------|
-| `Dockerfile` | ✓ VERIFIED | Pinned `oven/bun:1.3.1-slim` (not :latest); `bun install --frozen-lockfile`; runtime `--production` prune; `USER bun` non-root; exec-form CMD = API PID-1; STOPSIGNAL SIGTERM; tini fallback documented; build stage NEVER prunes. |
-| `.dockerignore` | ✓ VERIFIED | Secret-free context; keeps `migrations/**` (runtime reads .sql); keeps `.env.example`. |
-| `.env.example` | ✓ VERIFIED | Enumerates exactly the vars read: DATABASE_URL, ANTHROPIC_API_KEY, GEO_API_KEYS, PORT, SCORING_MODEL, WORKER_HEARTBEAT_FILE + worker tunables. No stray DEDUP (hardcoded const `audit-post.ts:29`). No values. |
-| `scripts/worker-healthcheck.sh` | ✓ VERIFIED | `bash -n` clean; exits 1 on missing/stale heartbeat (mtime age ≥ MAX_AGE_S). |
-| `scripts/deploy-verify.sh` | ✓ VERIFIED | `bash -n` clean; healthz poll → openapi/docs → 401 → authed POST job_id → poll to done/failed. Token from env (preflight die if unset); NO hardcoded bearer. Field names match (job_id, status enum done/failed/queued/running, healthz 200). |
-| `docs/deploy.md` | ✓ VERIFIED | Rule-21 runbook: HUMAN GATE vs AUTOMATABLE, two-resources-off-one-image, migration one-shot, stop grace ≥ SHUTDOWN_GRACE_MS, PID-1 guidance, post-deploy verify. Placeholders only. |
-| `DEPLOY-RECORD.md` | ✓ VERIFIED | Honest DEFERRED-LIVE; readiness table, ordered operator checklist, deferred-verification list, no fabricated transcript/UUIDs. |
-| `packages/worker/src/worker.ts` heartbeat | ✓ VERIFIED | `writeFileSync(heartbeatFile, Date.now())` each poll iteration (`worker.ts:52,76`); non-fatal on IO error. |
+|---|---|---|
+| `Dockerfile` | ✓ VERIFIED | Multi-stage `deps`→`build`→`runtime`; pinned `oven/bun:1.3.1-slim`; `bun install --frozen-lockfile`; production prune; `USER bun`; `EXPOSE 8080`; `STOPSIGNAL SIGTERM`; role-aware `HEALTHCHECK` dispatching on `GEO_ROLE` via `scripts/healthcheck.sh`; `ENTRYPOINT ["sh","scripts/docker-entrypoint.sh"]`. No plain `CMD` remains (see key-link gap below — expected given the GEO_ROLE fix, but undocumented). |
+| `scripts/docker-entrypoint.sh` | ✓ VERIFIED (new since original verification) | `case "${GEO_ROLE:-api}"` dispatches `worker`/`cron`/`api|*`, each via `exec` (correct PID-1/signal semantics). Not present at the time of the 2026-06-04 verification — added by commit `c2e1c39` after Coolify was found to ignore start-command overrides. |
+| `scripts/healthcheck.sh` | ✓ VERIFIED | Role-aware dispatch: worker -> heartbeat check, api -> `GET /healthz`, cron/other -> exit 0. |
+| `.dockerignore` | ✓ VERIFIED | Unchanged from original verification; secret-free context confirmed. |
+| `.env.example` | ⚠️ PARTIAL | Enumerates required + tunable vars correctly, INCLUDING documenting `CRON_*` vars added since. Does **not** list `GEO_ROLE`, the var that actually selects the process role today. |
+| `docs/deploy.md` | ✗ STALE | States the role-selection mechanism is a start-command override with "no entrypoint branch script" — directly contradicted by the current `Dockerfile`/`scripts/docker-entrypoint.sh`. See gap. |
+| `scripts/worker-healthcheck.sh`, `scripts/deploy-verify.sh` | ✓ VERIFIED | Unchanged, `bash -n` clean, logic matches original verification. |
+| `packages/worker/src/worker.ts` heartbeat | ✓ VERIFIED | `writeFileSync(heartbeatFile, String(Date.now()))` still present in the poll loop. |
+| `DEPLOY-RECORD.md` | ✓ VERIFIED as an honest record | Its 2026-07-29 update accurately documents the live deploy, the fetch-bug fix, and the still-open scoring/OAuth blocker — no fabricated success claims. |
 
-## Dependency Prune Correctness
+## Key Link Verification
 
-| Pkg | Dep type | Status |
-|-----|----------|--------|
-| `postgres` (@geo/db) | dependency | ✓ kept by `--production` |
-| `@electric-sql/pglite` (@geo/db) | devDependency | ✓ pruned (test-only) |
-| `hono`, `@hono/zod-openapi`, `@scalar/hono-api-reference`, `zod` (@geo/api) | dependency | ✓ kept (/docs + /openapi.json served in-code) |
-| `tsup`, `typescript`, `vitest` | devDependency | ✓ pruned (build-only, never in build stage) |
+| From | To | Via | Status | Detail |
+|---|---|---|---|---|
+| `Dockerfile` runtime stage | `packages/api/dist/main.js` | default `CMD` | ✗ NOT_WIRED (as originally specified) | No `CMD` instruction exists in the current `Dockerfile` at all — superseded by `ENTRYPOINT ["sh","scripts/docker-entrypoint.sh"]` + `GEO_ROLE` dispatch. Functionally equivalent goal is met via a different, correct mechanism; the 06-01-PLAN.md must-have literally describing "default CMD" is stale. |
+| `scripts/docker-entrypoint.sh` | `packages/{api,worker,cron}/dist/main.js` | `GEO_ROLE` case + `exec` | ✓ WIRED | Confirmed by direct read. |
+| Live API origin | Postgres | `DATABASE_URL` / `/healthz` deep check | ✓ WIRED (live) | `GET /healthz` returned `db:"ok"` live, 2026-09-12. |
+| `scripts/deploy-verify.sh` | `POST /audit` -> `GET /audit/{id}` | curl round-trip | ✓ EQUIVALENT PATH PROVEN LIVE | Script itself correct. The script has not been run as a single scripted invocation, but each assertion it makes was observed individually live on 2026-09-14, including an authed `GET /audit/{id}` returning `done` with score 35 and 5 findings. |
 
-## Behavioral Spot-Checks
+## Live Read-Only Checks (2026-09-12)
 
-| Behavior | Command | Result | Status |
-|----------|---------|--------|--------|
-| Worker tests green (heartbeat additive) | `bun run --cwd packages/worker test -- --run` | 38 passed (5 files) | ✓ PASS |
-| worker-healthcheck.sh syntax | `bash -n` | clean | ✓ PASS |
-| deploy-verify.sh syntax | `bash -n` | clean | ✓ PASS |
-| No tracked secrets | `git ls-files` + secret regex | only fake test fixtures (`user:pass@localhost`) | ✓ PASS |
-| Env var ↔ .env.example parity | grep api+worker src vs template | exact match; no missing/stray | ✓ PASS |
+| Check | Command | Result |
+|---|---|---|
+| Health | `curl https://ckmm0xfx45kxe3n9p44xkpx5.coolify.titaniumlabs.us/healthz` | `200 {"status":"ok","db":"ok"}` |
+| OpenAPI | `curl .../openapi.json` | `200` |
+| Docs | `curl .../docs` | `200` |
+| Unauth audit | `curl -X POST .../audit` (no auth header) | `401 {"error":"unauthorized","message":"Missing or malformed Authorization header"}` |
 
-## Anti-Patterns Found
+No authed request was made in the 2026-09-12 pass (would create a real prod job / incur cost). No Coolify MCP tools were available in that pass, so its conclusions on the scoring blocker rested on `DEPLOY-RECORD.md`'s 2026-07-29 account. **That reliance produced a wrong verdict -- see the correction below.**
 
-None blocking. `docker build` not run locally (no Docker in env; first build on Coolify) — documented, acceptable. Base tag `oven/bun:1.3.1-slim` not pull-verified in-env — note in DEPLOY-RECORD to confirm on first Coolify build.
+## Live Read-Only Re-Check (2026-09-14) -- DEPLOY-04 CORRECTION
+
+Coolify API access and authed read-only API access were both available this pass. No writes,
+no new audit jobs created; only `GET`s against already-completed jobs.
+
+| Check | Command | Result |
+|---|---|---|
+| Worker env key inventory | Coolify `list_application_envs` on worker `b1226r7ny7ic0sl1kdpkmi60` | Keys present: `DATABASE_URL`, `SHUTDOWN_GRACE_MS`, `GEO_ROLE=worker`, `SCORING_PROVIDER=cli`, `CLAUDE_CONFIG_DIR=/claude-config`, **`CLAUDE_CODE_OAUTH_TOKEN` (created 2026-07-31T00:34:12Z)**. `ANTHROPIC_API_KEY` is **absent** (removed as DEPLOY-RECORD recommended). Values were never printed. |
+| Audit history | `GET /audits?limit=100` (dashboard bearer) | 20 jobs: **10 `done`, 10 `failed`**. All 10 failures created on or before 2026-07-31T01:12:38Z. First `done` ever: `bd38d162-bbc0-4dd3-a8df-00469c7e9760` at **2026-07-31T01:20:05Z**, 46 min after the OAuth token landed. |
+| Recent scored audits | same | 2026-09-07 `rfc-editor.org/rfc/rfc9110.html` score **35**; 2026-09-07 `developer.mozilla.org/.../Web/HTTP` score **34**; 2026-09-01 `httpbin.org/html` score **31**; 2026-08-11 score 31 and 21; 2026-07-31 scores 67, 63, 26, 25, 21. |
+| Authed round-trip payload | `GET /audit/12b91fe5-0baa-4bfb-a208-588ad20ba96e` (dashboard bearer) | `200` `{"status":"done","score":35,"findings":[...5 findings...]}` |
+| Health | `GET /healthz` | `200 {"status":"ok","db":"ok"}` |
+| Auth enforced | unauthenticated `POST /audit` | `401` |
+
+**Conclusion:** the 2026-09-12 "DEPLOY-04 NOT SAT" finding is **wrong and is retracted**. The
+`claude setup-token` operator step was performed on 2026-07-31, `DEPLOY-RECORD.md` was simply
+never updated to say so, and every verifier since inherited its stale claim. The live service
+has been completing authed audits to `done` with numeric scores and findings for six weeks.
+
+**Follow-up (documentation only, not a blocker):** `DEPLOY-RECORD.md`'s 2026-07-29 update still
+reads "Scoring itself is still blocked" and should be amended to record the 2026-07-31 token
+provisioning and the first successful scored audit.
+
+## Anti-Patterns / Drift Found
+
+| File | Issue | Severity |
+|---|---|---|
+| `docs/deploy.md:12-20,77-79` | Documents a role-selection mechanism (start-command override) the Dockerfile's own comments say Coolify doesn't honor; no mention of the actual `GEO_ROLE` mechanism anywhere in the file | 🛑 Blocker (misconfigures any future new/replacement worker or cron resource) |
+| `.env.example` | Missing `GEO_ROLE` despite it being the var that actually selects process role | ⚠️ Warning |
+| `.planning/phases/06-containerize-coolify-deploy/DEPLOY-RECORD.md` | Its 2026-07-29 update still says "Scoring itself is still blocked ... `CLAUDE_CODE_OAUTH_TOKEN` is unset". False since 2026-07-31T00:34:12Z. This stale line is what caused the 2026-09-12 pass to wrongly fail DEPLOY-04. | ⚠️ Warning (stale record, propagates wrong verdicts) |
 
 ## Gaps Summary
 
-No actionable gaps within Phase 6 scope. The phase deliverable — containerization, deploy-readiness, and verify tooling — is complete and correct. The live `/healthz` + audit round-trip (roadmap SC #2, #4; DEPLOY-04) is a legitimately operator-gated DEFERRED-LIVE item: no Coolify app/Postgres provisioned, deploy branch unpushed (third-party origin), secrets absent. It is documented (DEPLOY-RECORD.md) and becomes a Phase-7 precondition. This is DEFERRED, not MISSING — the phase is not failed for it.
+The container build, role-dispatch, and secret-hygiene work is solid and live-correct today (confirmed by direct live curl checks matching DEPLOY-RECORD.md). Two things stop this from being a clean PASS:
 
-**Verdict: SHIP WITH NOTES.** All artifacts PASS; the only open item is the documented human-gated live deploy.
+1. **`docs/deploy.md` is factually wrong** about how role selection works post the `GEO_ROLE` fix (commit `c2e1c39`), and `.env.example` doesn't document `GEO_ROLE` at all. The live worker only works today because it was configured out-of-band; a future operator following the current runbook to add/replace a resource would silently get the wrong role. This is a straightforward doc fix, not a re-architecture.
+2. ~~The phase's headline live acceptance criterion has never been demonstrated.~~ **RETRACTED 2026-09-14.** It has been demonstrated continuously since 2026-07-31. The `claude setup-token` step was completed that day; `CLAUDE_CODE_OAUTH_TOKEN` is on the worker and the inert `ANTHROPIC_API_KEY` was removed. 10 authed audits have reached `done` with real numeric scores, the latest on 2026-09-07. DEPLOY-04 is SATISFIED. The only artifact never produced is a single scripted `deploy-verify.sh` exit-0 transcript, which is a nice-to-have record, not the requirement.
+
+Recommend: (a) the doc-only fix to `docs/deploy.md` + `.env.example` documenting `GEO_ROLE` (no re-verification of the container build needed); (b) amend `DEPLOY-RECORD.md` to record the 2026-07-31 OAuth provisioning and first successful scored audit, so no future verifier inherits the stale "scoring is blocked" claim again; (c) `v1.0-REQUIREMENTS.md:57` is restored to `SAT (DL)` by this pass.
 
 ---
 
-_Verified: 2026-06-04T20:20:00Z_
+_Verified: 2026-09-12T00:00:00Z; DEPLOY-04 corrected 2026-09-14 on live read-only evidence_
 _Verifier: Claude (gsd-verifier)_
