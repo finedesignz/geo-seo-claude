@@ -1,0 +1,45 @@
+name: db-postgres-concurrency
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  concurrency-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: geo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/geo_test
+      ALLOW_DB_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build @geo/core
+        run: bun run --filter=@geo/core build
+
+      - name: Build @geo/db
+        run: bun run --filter=@geo/db build
+
+      - name: Run @geo/db tests (real Postgres, true concurrency)
+        run: bun run --filter=@geo/db test -- --run
