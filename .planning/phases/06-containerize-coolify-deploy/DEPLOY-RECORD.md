@@ -163,3 +163,35 @@ Running `scripts/deploy-verify.sh` against the live URL (operator step 8) discha
 No deploy logs were captured (no deploy performed) — there is no transcript to scrub. When
 the operator runs the live deploy, confirm no secret value is echoed before committing any
 transcript into this record (`env.ts` names vars, never echoes values).
+
+---
+
+## AMENDMENT 2026-09-21 — scoring blocker line above (2026-07-29) is stale
+
+The "UPDATE 2026-07-29" section above states "Scoring itself is still blocked ...
+`CLAUDE_CODE_OAUTH_TOKEN` is unset." That has not been true since 2026-07-31. Per a live,
+read-only re-check on 2026-09-14 (recorded in `06-VERIFICATION.md`), confirmed again in this
+pass:
+
+- `CLAUDE_CODE_OAUTH_TOKEN` has been present on the worker app (`b1226r7ny7ic0sl1kdpkmi60`)
+  since **2026-07-31T00:34:12Z** (key name only observed; value never read into any report).
+  The inert `ANTHROPIC_API_KEY` flagged for removal above is confirmed gone from the worker env.
+- The first audit job ever to reach `done` was `bd38d162-bbc0-4dd3-a8df-00469c7e9760` at
+  **2026-07-31T01:20:05Z** — 46 minutes after the token landed. Every prior failure
+  (`SCORING_API_ERROR` era) predates that timestamp.
+- Live audit history is **10 `done` / 10 `failed`** (20 total), all 10 failures at or before
+  2026-07-31T01:12:38Z. Ten real scored audits have completed since, the most recent on
+  **2026-09-07** (`rfc-editor.org/rfc/rfc9110.html` score 35; `developer.mozilla.org/.../Web/HTTP`
+  score 34), and one on 2026-09-01 (`httpbin.org/html` score 31).
+- This history does not have a record of who ran `claude setup-token` or exactly when within
+  the 2026-07-29 -> 2026-07-31T00:34:12Z window; only the token's creation timestamp on the
+  worker app is directly observed.
+
+This does not rewrite the 2026-07-29 entry (left as-written, for history) — it corrects the
+record going forward so no future verifier inherits the stale "scoring is blocked" claim.
+DEPLOY-04 is SATISFIED; see `06-VERIFICATION.md` for the full live evidence trail.
+
+**Also noting for the record:** the `geo-cron-reaudit` schedule was disabled
+**2026-06-12T04:19:06Z** (reason not recorded in this file at the time) and was re-enabled
+**2026-09-15T09:47Z** after panel review. Neither event is scoring-related; noted here only
+because it falls in the same operational window this record tracks.
