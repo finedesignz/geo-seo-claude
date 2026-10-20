@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="48x48">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icon.svg') }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
   <title>{% block title %}GEO-SEO CRM{% endblock %}</title>
 
   <!-- Bootstrap 5 dark -->
@@ -83,7 +87,7 @@
 
 <nav class="navbar navbar-dark mb-4">
   <div class="container-fluid px-4">
-    <a class="navbar-brand" href="/">GEO<span>-SEO</span> CRM</a>
+    <a class="navbar-brand d-flex align-items-center gap-2" href="/"><img src="{{ url_for('static', filename='icon-192.png') }}" alt="" width="28" height="28" class="rounded">GEO<span>-SEO</span> CRM</a>
     <span class="text-secondary" style="font-size:.8rem;">
       <i class="bi bi-clock me-1"></i>{{ now }}
     </span>
