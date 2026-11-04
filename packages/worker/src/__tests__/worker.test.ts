@@ -69,7 +69,7 @@ function makeOpts(
 ): WorkerOptions {
   return {
     dal,
-    anthropic: { messages: { create: vi.fn() } },
+    scorer: { score: vi.fn().mockResolvedValue({ score: 80, findings: {} }) },
     fetcherFactory: () => vi.fn().mockResolvedValue({ url: "", status: 200, headers: {}, body: "<html/>", redirectChain: [] }),
     concurrency: 2,
     pollIntervalMs: 50,
@@ -252,8 +252,7 @@ describe("WORK-03: concurrency cap", () => {
     // Since the worker polls at pollIntervalMs, we can advance timers and check.
 
     // Actually the simpler approach: since worker calls runAudit(job, deps) where
-    // scorer = createScorer(anthropic, ...), and anthropic.messages.create is our mock,
-    // we control the anthropic client to simulate long-running jobs.
+    // scorer is opts.scorer, we control its score() to simulate long-running jobs.
 
     let resolveMsg1!: (v: unknown) => void;
     let resolveMsg2!: (v: unknown) => void;
@@ -265,16 +264,12 @@ describe("WORK-03: concurrency cap", () => {
       msgCount++;
       if (msgCount === 1) return msg1;
       if (msgCount === 2) return msg2;
-      // Return a valid tool_use response for subsequent calls
-      return {
-        content: [{ type: "tool_use", id: "t1", name: "record_geo_score", input: { score: 80, findings: {} } }],
-        usage: { input_tokens: 10, output_tokens: 5 },
-      };
+      return { score: 80, findings: {} };
     });
 
     const opts = makeOpts(dal, {
       concurrency: 2,
-      anthropic: { messages: { create: mockCreate } },
+      scorer: { score: mockCreate },
       pollIntervalMs: 50,
       sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
       scheduleInterval: setInterval as unknown as WorkerOptions["scheduleInterval"],
@@ -292,10 +287,7 @@ describe("WORK-03: concurrency cap", () => {
     expect(callsBeforeRelease).toBe(2);
 
     // Resolve job1's scoring call
-    resolveMsg1({
-      content: [{ type: "tool_use", id: "t1", name: "record_geo_score", input: { score: 75, findings: {} } }],
-      usage: { input_tokens: 10, output_tokens: 5 },
-    });
+    resolveMsg1({ score: 75, findings: {} });
 
     // Advance time to let job1 complete and trigger 3rd claim
     await vi.advanceTimersByTimeAsync(200);
@@ -304,10 +296,7 @@ describe("WORK-03: concurrency cap", () => {
     expect(claimMock.mock.calls.length).toBeGreaterThanOrEqual(3);
 
     // Resolve job2 and shutdown
-    resolveMsg2({
-      content: [{ type: "tool_use", id: "t2", name: "record_geo_score", input: { score: 60, findings: {} } }],
-      usage: { input_tokens: 10, output_tokens: 5 },
-    });
+    resolveMsg2({ score: 60, findings: {} });
 
     await vi.advanceTimersByTimeAsync(200);
     process.emit("SIGTERM");
@@ -343,8 +332,8 @@ describe("WORK-04f: rejecting pipeline frees slot, no unhandledRejection", () =>
       }),
     });
 
-    // Make anthropic throw immediately to simulate an unexpected pipeline error
-    const mockCreate = vi.fn().mockRejectedValue(new Error("unexpected SDK crash"));
+    // Make the scorer throw immediately to simulate an unexpected pipeline error
+    const mockCreate = vi.fn().mockRejectedValue(new Error("unexpected scorer crash"));
 
     const unhandledRejections: unknown[] = [];
     const handler = (reason: unknown) => unhandledRejections.push(reason);
@@ -352,7 +341,7 @@ describe("WORK-04f: rejecting pipeline frees slot, no unhandledRejection", () =>
 
     const opts = makeOpts(dal, {
       concurrency: 1,
-      anthropic: { messages: { create: mockCreate } },
+      scorer: { score: mockCreate },
       pollIntervalMs: 50,
       sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
       scheduleInterval: setInterval as unknown as WorkerOptions["scheduleInterval"],

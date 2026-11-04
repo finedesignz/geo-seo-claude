@@ -20,12 +20,11 @@
  * CLI prefers it and bills via the API instead of the subscription. So we strip
  * `ANTHROPIC_API_KEY` from the child process env — forcing subscription auth.
  *
- * The returned object is shape-compatible with createScorer() (scorer.ts), so
+ * The returned object satisfies the Scorer contract (types.ts), so
  * worker.ts/pipeline.ts consume it through the identical `.score()` seam.
  */
 
 import { spawn } from "node:child_process";
-import type Anthropic from "@anthropic-ai/sdk";
 import type { FindingsShape } from "@geo/db";
 import {
   GEO_SCORING_RUBRIC,
@@ -360,18 +359,6 @@ export interface CliScorerOptions {
   spawnFn?: CliSpawnFn;
 }
 
-/** Zero-valued usage stand-in: subscription/CLI scoring isn't API-token-billed. */
-function emptyUsage(): Anthropic.Usage {
-  return {
-    input_tokens: 0,
-    output_tokens: 0,
-    cache_creation_input_tokens: null,
-    cache_read_input_tokens: null,
-    server_tool_use: null,
-    service_tier: null,
-  } as Anthropic.Usage;
-}
-
 export function createCliScorer(opts: CliScorerOptions) {
   const bin = opts.claudeBin ?? "claude";
   const spawnFn = opts.spawnFn ?? defaultSpawnFn;
@@ -449,7 +436,6 @@ export function createCliScorer(opts: CliScorerOptions) {
       return {
         score: parsed.data.score,
         findings: parsed.data.findings,
-        usage: emptyUsage(),
       };
     },
   };
