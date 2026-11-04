@@ -19,7 +19,7 @@ pass, unlike a bare upstream checkout with no fork remote.
   `@geo/core` (shared types/logic), `@geo/cron` (scheduled scoring jobs),
   `@geo/db` (Postgres via `postgres`/porsager, `tsup`-built), `@geo/fetch`
   (HTTP fetching, `undici` + `ipaddr.js`), `@geo/worker` (scoring worker,
-  `@anthropic-ai/sdk`).
+  Claude Code CLI scorer).
 - `tsup` build, `vitest` test, across every package.
 - `@electric-sql/pglite` as an in-memory Postgres for tests/dev in several
   packages.
@@ -71,28 +71,11 @@ No `.planning/` directory present -- not currently GSD-tracked.
 
 ## Gotchas
 
-- **LLM API-key handling is a REAL, LIVE, DUAL-MODE design -- and one of the
-  two modes is a genuine rule 22c violation when selected. This needs an
-  actual fix, not just documentation, flag it for follow-up.**
-  `packages/worker/src/env.ts` implements `SCORING_PROVIDER` with two modes:
-  - `"cli"` -- uses `CLAUDE_CODE_OAUTH_TOKEN` (subscription, compliant).
-  - `"api"` -- uses `ANTHROPIC_API_KEY` directly against the Anthropic
-    Messages API (`packages/worker/src/main.ts:70`,
-    `packages/worker/src/scorer.ts:10`). **This is a real rule 22c
-    violation when this mode is active** -- it is not a test-only fake, not
-    an avoided path; it is a fully implemented, documented, supported
-    production code path.
-  - **Worse: the default is not "cli."** `resolveScoringProvider()`
-    (`env.ts:25-34`) auto-selects `"api"` whenever `ANTHROPIC_API_KEY`
-    happens to be present in the environment, with no explicit
-    `SCORING_PROVIDER` set. A container that merely has that env var set for
-    some unrelated reason will silently switch to API-key auth.
-  - The comments here are about not *committing* a real key ("Never commit a
-    real API key") -- they are NOT a statement that the API-key path itself
-    is disallowed. Do not mistake this for the compliant-by-design pattern
-    seen in agentautofix/aiadshq-app; this repo needs the `"api"` mode
-    either removed or the default flipped to always require an explicit,
-    audited opt-in, with `"cli"` as the unconditional default.
+- **LLM auth is subscription OAuth only (rule 22c).** The former `SCORING_PROVIDER=api`
+  / `ANTHROPIC_API_KEY` scoring mode was removed. `@geo/worker` scores only via the
+  Claude Code CLI (`CLAUDE_CODE_OAUTH_TOKEN`); `SCORING_PROVIDER` is optional and any
+  value other than `cli` fails at startup. `cli-scorer.ts` still strips `ANTHROPIC_API_KEY`
+  from the child env.
 - README/install scripts (`install.sh`, `install-win.sh`) still reference the
   upstream fork URL (`zubair-trabzada/geo-seo-claude`), not
   `finedesignz/geo-seo-claude` -- stale branding from the fork point, not a
