@@ -194,6 +194,21 @@ export function extractCliResult(stdout: string): string | null {
 }
 
 /**
+ * Env vars that make the `claude` CLI authenticate with something other than
+ * subscription OAuth (names confirmed in code.claude.com/docs/en/env-vars).
+ * Stripped from the child env; secret-valued ones are also redacted from output.
+ */
+const NON_OAUTH_AUTH_ENV = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "CLAUDE_CODE_USE_FOUNDRY",
+  "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+  "CLAUDE_CODE_USE_MANTLE",
+] as const;
+
+/**
  * Redact secret-shaped substrings from arbitrary text: literal
  * CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_API_KEY env values, plus generic
  * token shapes (sk-ant-…, oat01_…). Shared by redactStderr and the
@@ -201,7 +216,7 @@ export function extractCliResult(stdout: string): string | null {
  */
 function redactSecrets(text: string): string {
   let s = text;
-  for (const key of ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] as const) {
+  for (const key of ["CLAUDE_CODE_OAUTH_TOKEN", ...NON_OAUTH_AUTH_ENV]) {
     const v = process.env[key];
     if (v && v.length >= 6) s = s.split(v).join("[REDACTED]");
   }
@@ -376,7 +391,7 @@ export function createCliScorer(opts: CliScorerOptions) {
       // Force subscription auth: never let the CLI see an API key (it would bill
       // the API instead of the Claude Code subscription).
       const childEnv: NodeJS.ProcessEnv = { ...process.env };
-      delete childEnv["ANTHROPIC_API_KEY"];
+      for (const key of NON_OAUTH_AUTH_ENV) delete childEnv[key];
 
       const argv = buildCliArgv(opts.model);
 
