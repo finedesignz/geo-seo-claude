@@ -16,7 +16,7 @@ import {
   type CliSpawnFn,
   type CliSpawnResult,
 } from "../cli-scorer.js";
-import { ScoringError } from "../scorer.js";
+import { ScoringError, GeoScoreSchema } from "../scorer.js";
 import type { FindingsShape } from "@geo/db";
 
 const FINDINGS = {} as FindingsShape;
@@ -202,6 +202,39 @@ describe("createCliScorer.score — prose preamble regression (2026-07-30 prod i
     const scorer = createCliScorer({ model: "m", timeoutMs: 5000, spawnFn });
     const out = await scorer.score(FINDINGS);
     expect(out.score).toBe(24);
+  });
+});
+
+describe("GeoScoreSchema bounds", () => {
+  it("accepts score 0 and 100", () => {
+    expect(GeoScoreSchema.safeParse({ score: 0, findings: {} }).success).toBe(true);
+    expect(GeoScoreSchema.safeParse({ score: 100, findings: {} }).success).toBe(true);
+  });
+  it.each([150, -1, 50.5])("rejects score %s", (score) => {
+    expect(GeoScoreSchema.safeParse({ score, findings: {} }).success).toBe(false);
+  });
+  it("rejects missing findings", () => {
+    expect(GeoScoreSchema.safeParse({ score: 50 }).success).toBe(false);
+  });
+});
+
+describe("createCliScorer.score failure paths never resolve", () => {
+  const cases: Array<[string, Partial<CliSpawnResult>]> = [
+    ["non-zero exit", { exitCode: 2, stderr: "boom" }],
+    ["malformed output", { stdout: streamJson("not json") }],
+    ["timeout", { timedOut: true, exitCode: null }],
+  ];
+  it.each(cases)("%s rejects with ScoringError", async (_label, result) => {
+    const scorer = createCliScorer({ model: "m", timeoutMs: 5000, spawnFn: fakeSpawn(result) });
+    let resolved: unknown = "unset";
+    let err: unknown;
+    try {
+      resolved = await scorer.score(FINDINGS);
+    } catch (e) {
+      err = e;
+    }
+    expect(resolved).toBe("unset");
+    expect(err).toBeInstanceOf(ScoringError);
   });
 });
 

@@ -39,11 +39,9 @@ export const GeoScoreSchema = z.object({
 export type GeoScoreOutput = z.infer<typeof GeoScoreSchema>;
 
 // ---------------------------------------------------------------------------
-// GEO_SCORING_RUBRIC — static system block (the prompt-cached prefix)
+// GEO_SCORING_RUBRIC — static scoring rubric
 //
-// This string is stable and static across all scoring calls. It carries
-// cache_control:{type:'ephemeral'} and is the cached prefix proven by
-// usage.cache_creation_input_tokens / usage.cache_read_input_tokens metadata.
+// This string is stable and static across all scoring calls.
 // Do NOT include any dynamic per-job content here.
 // ---------------------------------------------------------------------------
 
