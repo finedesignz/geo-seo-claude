@@ -220,7 +220,9 @@ function redactSecrets(text: string): string {
     const v = process.env[key];
     if (v && v.length >= 6) s = s.split(v).join("[REDACTED]");
   }
-  s = s.replace(/\b(?:sk-ant|oat\d*)[-_][A-Za-z0-9_-]{8,}\b/g, "[REDACTED]");
+  // No leading \b: a JSON-escaped newline ("\nsk-ant-...") leaves the token
+  // glued to the letter "n", which defeats a word boundary.
+  s = s.replace(/(?:sk-ant|oat\d*)[-_][A-Za-z0-9_-]{8,}\b/g, "[REDACTED]");
   return s;
 }
 

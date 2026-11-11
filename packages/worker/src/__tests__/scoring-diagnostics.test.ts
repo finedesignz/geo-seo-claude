@@ -68,6 +68,13 @@ describe("scoring diagnostics keep auth fixtures secret", () => {
     }
   });
 
+  it("redacts token-shaped secrets glued to a JSON-escaped newline", async () => {
+    const token = "sk-ant-api03-abcdefgh12345678";
+    const error = await diagnostic({ stdout: streamJson(`{"error":"failed\\n${token}`) });
+    expect(error.message).toContain("[REDACTED]");
+    expect(error.message).not.toContain(token);
+  });
+
   it("keeps bounded, useful diagnostics for non-sensitive invalid JSON", async () => {
     const error = await diagnostic({ stdout: streamJson("not-json " + "x".repeat(2000)) });
     expect(error.code).toBe("SCORING_MALFORMED_OUTPUT");

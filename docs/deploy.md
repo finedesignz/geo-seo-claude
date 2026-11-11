@@ -55,7 +55,7 @@ Enter in the Coolify UI — **never committed**. Names/defaults come from `.env.
 | `GEO_ROLE`             |  ✔  |   ✔    |         | `api` (default) / `worker` / `cron` — selects the process, see Overview |
 | `DATABASE_URL`         |  ✔  |   ✔    |    ✔    | Coolify-internal Postgres URL (secret)             |
 | `SCORING_PROVIDER`     |     |   ✔    |         | optional; only `cli` is supported (default). Any other value, incl. `api`, fails at startup |
-| `CLAUDE_CODE_OAUTH_TOKEN` | |  ✔*    |         | `claude setup-token` output (secret) — required for scoring |
+| `CLAUDE_CODE_OAUTH_TOKEN` | |  ✔*    |         | `claude setup-token` output (secret) -- required for scoring |
 | `GEO_API_KEYS`         |  ✔  |        |         | bearer allow-list `token:consumer_id,...` (secret) |
 | `PORT`                 |  ✔  |        |         | default 8080 (match the resource's HTTP port)      |
 | `SHUTDOWN_GRACE_MS`    |     |   ✔    |         | default 30000 — see stop grace (step 4)            |

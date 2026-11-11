@@ -28,8 +28,6 @@ export async function runWorker(opts: WorkerOptions): Promise<void> {
     leaseTtlSecs,
     reclaimIntervalMs,
     maxAttempts,
-    scoringTimeoutMs,
-    scoringModel,
     shutdownGraceMs,
   } = opts;
 
