@@ -428,11 +428,14 @@ export function createCliScorer(opts: CliScorerOptions) {
       let parsedJson: unknown;
       try {
         parsedJson = JSON.parse(stripJsonFence(resultText));
-      } catch (err) {
+      } catch {
+        // Parser messages can echo input, including truncated secret prefixes
+        // that exact-value redaction cannot recognize. Keep only our bounded,
+        // redacted input snippet, never the engine's raw diagnostic.
         throw new ScoringError(
           "SCORING_MALFORMED_OUTPUT",
           true,
-          `JSON.parse failed: ${err instanceof Error ? err.message : String(err)} — raw result: ${redactSnippet(resultText)}`,
+          `JSON.parse failed — raw result: ${redactSnippet(resultText)}`,
         );
       }
 
