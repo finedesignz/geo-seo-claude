@@ -118,8 +118,14 @@ describe("lifecycle: queued → running → done", () => {
     const findings = {
       citability: {
         score: 88,
-        breakdown: { title: 20, content: 40, metadata: 28 },
-        signals: ["has-title"],
+        breakdown: {
+          answer_block_quality: 28,
+          self_containment: 22,
+          structural_readability: 18,
+          statistical_density: 12,
+          uniqueness_signals: 8,
+        },
+        blocksAnalyzed: 1,
         errors: [],
       },
     };

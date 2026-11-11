@@ -16,7 +16,7 @@ import {
   type CliSpawnFn,
   type CliSpawnResult,
 } from "../cli-scorer.js";
-import { ScoringError } from "../scorer.js";
+import { ScoringError, GeoScoreSchema } from "../scorer.js";
 import type { FindingsShape } from "@geo/db";
 
 const FINDINGS = {} as FindingsShape;
@@ -205,6 +205,39 @@ describe("createCliScorer.score — prose preamble regression (2026-07-30 prod i
   });
 });
 
+describe("GeoScoreSchema bounds", () => {
+  it("accepts score 0 and 100", () => {
+    expect(GeoScoreSchema.safeParse({ score: 0, findings: {} }).success).toBe(true);
+    expect(GeoScoreSchema.safeParse({ score: 100, findings: {} }).success).toBe(true);
+  });
+  it.each([150, -1, 50.5])("rejects score %s", (score) => {
+    expect(GeoScoreSchema.safeParse({ score, findings: {} }).success).toBe(false);
+  });
+  it("rejects missing findings", () => {
+    expect(GeoScoreSchema.safeParse({ score: 50 }).success).toBe(false);
+  });
+});
+
+describe("createCliScorer.score failure paths never resolve", () => {
+  const cases: Array<[string, Partial<CliSpawnResult>]> = [
+    ["non-zero exit", { exitCode: 2, stderr: "boom" }],
+    ["malformed output", { stdout: streamJson("not json") }],
+    ["timeout", { timedOut: true, exitCode: null }],
+  ];
+  it.each(cases)("%s rejects with ScoringError", async (_label, result) => {
+    const scorer = createCliScorer({ model: "m", timeoutMs: 5000, spawnFn: fakeSpawn(result) });
+    let resolved: unknown = "unset";
+    let err: unknown;
+    try {
+      resolved = await scorer.score(FINDINGS);
+    } catch (e) {
+      err = e;
+    }
+    expect(resolved).toBe("unset");
+    expect(err).toBeInstanceOf(ScoringError);
+  });
+});
+
 describe("createCliScorer.score", () => {
   it("parses a valid score from stream-json", async () => {
     const spawnFn = fakeSpawn({ stdout: streamJson('{"score":73,"findings":{"crawlability":{"points":18}}}') });
@@ -221,14 +254,30 @@ describe("createCliScorer.score", () => {
     expect((await scorer.score(FINDINGS)).score).toBe(50);
   });
 
-  it("strips ANTHROPIC_API_KEY from the child env (forces subscription auth)", async () => {
-    process.env["ANTHROPIC_API_KEY"] = "sk-ant-should-not-leak";
-    const spawnFn = fakeSpawn({ stdout: streamJson('{"score":1,"findings":{}}') });
-    const scorer = createCliScorer({ model: "m", timeoutMs: 5000, spawnFn });
-    await scorer.score(FINDINGS);
-    const passedEnv = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]![2].env;
-    expect(passedEnv["ANTHROPIC_API_KEY"]).toBeUndefined();
-    delete process.env["ANTHROPIC_API_KEY"];
+  it("strips ANTHROPIC_API_KEY and other non-OAuth auth vars from the child env (forces subscription auth)", async () => {
+    const stripped = [
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "CLAUDE_CODE_USE_BEDROCK",
+      "CLAUDE_CODE_USE_VERTEX",
+      "CLAUDE_CODE_USE_FOUNDRY",
+      "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+      "CLAUDE_CODE_USE_MANTLE",
+    ];
+    const saved = stripped.map((k) => process.env[k]);
+    for (const k of stripped) process.env[k] = "dummy-should-not-leak";
+    try {
+      const spawnFn = fakeSpawn({ stdout: streamJson('{"score":1,"findings":{}}') });
+      const scorer = createCliScorer({ model: "m", timeoutMs: 5000, spawnFn });
+      await scorer.score(FINDINGS);
+      const passedEnv = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]![2].env;
+      for (const k of stripped) expect(passedEnv[k]).toBeUndefined();
+    } finally {
+      stripped.forEach((k, i) => {
+        if (saved[i] === undefined) delete process.env[k];
+        else process.env[k] = saved[i];
+      });
+    }
   });
 
   it("uses the configured claudeBin", async () => {

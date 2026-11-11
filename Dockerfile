@@ -55,9 +55,9 @@ ENV NODE_ENV=production
 #   --build-arg CLAUDE_CODE_VERSION=x.y.z
 ARG CLAUDE_CODE_VERSION=latest
 # Install curl/wget for Coolify in-container health checks (slim image has none),
-# plus Node.js + the Claude Code CLI used by the worker when SCORING_PROVIDER=cli.
+# plus Node.js + the Claude Code CLI used by the worker for scoring.
 # The `claude` binary authenticates via CLAUDE_CODE_OAUTH_TOKEN (subscription) —
-# see packages/worker/src/cli-scorer.ts. API mode (SCORING_PROVIDER=api) ignores it.
+# see packages/worker/src/cli-scorer.ts. The worker never uses an API key.
 # Shared image: api/cron roles carry the CLI too (harmless, unused by them).
 USER root
 RUN apt-get update \

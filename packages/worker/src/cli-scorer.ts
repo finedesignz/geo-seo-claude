@@ -20,12 +20,11 @@
  * CLI prefers it and bills via the API instead of the subscription. So we strip
  * `ANTHROPIC_API_KEY` from the child process env — forcing subscription auth.
  *
- * The returned object is shape-compatible with createScorer() (scorer.ts), so
+ * The returned object satisfies the Scorer contract (types.ts), so
  * worker.ts/pipeline.ts consume it through the identical `.score()` seam.
  */
 
 import { spawn } from "node:child_process";
-import type Anthropic from "@anthropic-ai/sdk";
 import type { FindingsShape } from "@geo/db";
 import {
   GEO_SCORING_RUBRIC,
@@ -195,6 +194,21 @@ export function extractCliResult(stdout: string): string | null {
 }
 
 /**
+ * Env vars that make the `claude` CLI authenticate with something other than
+ * subscription OAuth (names confirmed in code.claude.com/docs/en/env-vars).
+ * Stripped from the child env; secret-valued ones are also redacted from output.
+ */
+const NON_OAUTH_AUTH_ENV = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "CLAUDE_CODE_USE_FOUNDRY",
+  "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+  "CLAUDE_CODE_USE_MANTLE",
+] as const;
+
+/**
  * Redact secret-shaped substrings from arbitrary text: literal
  * CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_API_KEY env values, plus generic
  * token shapes (sk-ant-…, oat01_…). Shared by redactStderr and the
@@ -202,11 +216,13 @@ export function extractCliResult(stdout: string): string | null {
  */
 function redactSecrets(text: string): string {
   let s = text;
-  for (const key of ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] as const) {
+  for (const key of ["CLAUDE_CODE_OAUTH_TOKEN", ...NON_OAUTH_AUTH_ENV]) {
     const v = process.env[key];
     if (v && v.length >= 6) s = s.split(v).join("[REDACTED]");
   }
-  s = s.replace(/\b(?:sk-ant|oat\d*)[-_][A-Za-z0-9_-]{8,}\b/g, "[REDACTED]");
+  // No leading \b: a JSON-escaped newline ("\nsk-ant-...") leaves the token
+  // glued to the letter "n", which defeats a word boundary.
+  s = s.replace(/(?:sk-ant|oat\d*)[-_][A-Za-z0-9_-]{8,}\b/g, "[REDACTED]");
   return s;
 }
 
@@ -360,18 +376,6 @@ export interface CliScorerOptions {
   spawnFn?: CliSpawnFn;
 }
 
-/** Zero-valued usage stand-in: subscription/CLI scoring isn't API-token-billed. */
-function emptyUsage(): Anthropic.Usage {
-  return {
-    input_tokens: 0,
-    output_tokens: 0,
-    cache_creation_input_tokens: null,
-    cache_read_input_tokens: null,
-    server_tool_use: null,
-    service_tier: null,
-  } as Anthropic.Usage;
-}
-
 export function createCliScorer(opts: CliScorerOptions) {
   const bin = opts.claudeBin ?? "claude";
   const spawnFn = opts.spawnFn ?? defaultSpawnFn;
@@ -389,7 +393,7 @@ export function createCliScorer(opts: CliScorerOptions) {
       // Force subscription auth: never let the CLI see an API key (it would bill
       // the API instead of the Claude Code subscription).
       const childEnv: NodeJS.ProcessEnv = { ...process.env };
-      delete childEnv["ANTHROPIC_API_KEY"];
+      for (const key of NON_OAUTH_AUTH_ENV) delete childEnv[key];
 
       const argv = buildCliArgv(opts.model);
 
@@ -426,11 +430,14 @@ export function createCliScorer(opts: CliScorerOptions) {
       let parsedJson: unknown;
       try {
         parsedJson = JSON.parse(stripJsonFence(resultText));
-      } catch (err) {
+      } catch {
+        // Parser messages can echo input, including truncated secret prefixes
+        // that exact-value redaction cannot recognize. Keep only our bounded,
+        // redacted input snippet, never the engine's raw diagnostic.
         throw new ScoringError(
           "SCORING_MALFORMED_OUTPUT",
           true,
-          `JSON.parse failed: ${err instanceof Error ? err.message : String(err)} — raw result: ${redactSnippet(resultText)}`,
+          `JSON.parse failed — raw result: ${redactSnippet(resultText)}`,
         );
       }
 
@@ -449,7 +456,6 @@ export function createCliScorer(opts: CliScorerOptions) {
       return {
         score: parsed.data.score,
         findings: parsed.data.findings,
-        usage: emptyUsage(),
       };
     },
   };
