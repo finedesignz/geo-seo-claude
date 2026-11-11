@@ -34,6 +34,7 @@ function makeJob(overrides?: Partial<AuditJob>): AuditJob {
     findings: null,
     errorCode: null,
     callbackUrl: null,
+    consumerId: null,
     attempts: 1,
     lockedAt: new Date(),
     leaseExpiresAt: new Date(Date.now() + 120_000),
@@ -48,6 +49,7 @@ function makeJob(overrides?: Partial<AuditJob>): AuditJob {
 
 function makeMockDal(overrides?: Partial<AuditDal>): AuditDal {
   return {
+    ping: vi.fn().mockResolvedValue(undefined),
     insertJob: vi.fn(),
     claimNextJob: vi.fn().mockResolvedValue(null),
     completeJob: vi.fn().mockResolvedValue(true),
@@ -80,8 +82,8 @@ function makeOpts(
     scoringModel: "claude-sonnet-4-6",
     shutdownGraceMs: 1000,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    scheduleInterval: (fn, ms) => setInterval(fn, ms) as unknown as ReturnType<typeof setInterval>,
-    cancelInterval: (h) => clearInterval(h as unknown as ReturnType<typeof clearInterval>),
+    scheduleInterval: (fn, ms) => setInterval(fn, ms),
+    cancelInterval: (h: ReturnType<typeof setInterval>) => clearInterval(h),
     ...overrides,
   };
 }
