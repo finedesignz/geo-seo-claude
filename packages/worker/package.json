@@ -26,7 +26,6 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.100.1",
     "@geo/core": "workspace:*",
     "@geo/db": "workspace:*",
     "@geo/fetch": "workspace:*",

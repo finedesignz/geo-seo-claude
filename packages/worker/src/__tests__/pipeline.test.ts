@@ -20,6 +20,7 @@ import type { AuditDal } from "@geo/db";
 import type { Fetcher, FetchResult } from "@geo/core";
 import { runAudit } from "../pipeline.js";
 import { ScoringError } from "../scorer.js";
+import { createCliScorer } from "../cli-scorer.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -109,6 +110,37 @@ describe("pipeline (WORK-02)", () => {
 
   afterEach(async () => {
     await db.close();
+  });
+
+  it("logs secret-safe CLI parse diagnostics while requeueing only the error code", async () => {
+    const key = "ANTHROPIC_AUTH_TOKEN";
+    const saved = process.env[key];
+    const secret = "fakeSecret123";
+    process.env[key] = secret;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const job = await insertAndClaim();
+      const scorer = createCliScorer({ model: "fixture", timeoutMs: 5000,
+        spawnFn: async () => ({ exitCode: 0, timedOut: false, stderr: "",
+          stdout: JSON.stringify({ type: "result", subtype: "success", result: secret }),
+        }),
+      });
+      await runAudit(job, { dal, scorer, fetcher: makeOkFetcher(),
+        leaseTtlSecs: LEASE_TTL, maxAttempts: MAX_ATTEMPTS });
+      const after = await dal.getJob(job.id);
+      expect(after!.status).toBe("queued");
+      expect(after!.errorCode).toBe("SCORING_MALFORMED_OUTPUT");
+      expect(after!.score).toBeNull();
+      expect(log).toHaveBeenCalledTimes(1);
+      const text = log.mock.calls.flat().join(" ");
+      expect(text).toContain("JSON.parse failed");
+      expect(text).toContain("[REDACTED]");
+      expect(text).not.toContain(secret);
+    } finally {
+      log.mockRestore();
+      if (saved === undefined) delete process.env[key];
+      else process.env[key] = saved;
+    }
   });
 
   async function insertAndClaim(url = "https://example.com/", attempts = 1) {

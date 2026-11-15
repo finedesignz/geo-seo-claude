@@ -1,23 +1,11 @@
 /**
  * @geo/worker — scorer.ts
  *
- * Converts a deterministic @geo/core FindingsShape into a validated {score, findings}
- * via ONE forced-tool-use Anthropic messages.create call, with prompt caching on the
- * static rubric and an AbortController timeout.
- *
- * IMPORTANT (RESEARCH Pitfall 1 / T-04-RETRY):
- * The production Anthropic client MUST be constructed with `maxRetries: 0`:
- *   new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 })
- * The SDK defaults to maxRetries:2, which auto-retries 429/529/5xx internally.
- * With maxRetries>0, the AbortController timeout can expire mid-SDK-retry and throw
- * APIConnectionTimeoutError instead of RateLimitError, mis-classifying the retry
- * disposition. Set maxRetries:0 and let the lease/attempts mechanism own retries.
+ * Shared scoring contract: rubric, output schema, ScoringError and ScoreResult.
+ * Scoring itself runs through the Claude Code CLI scorer (cli-scorer.ts).
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import type { AnthropicMessagesClient } from "./types.js";
-import type { FindingsShape } from "@geo/db";
 
 // ---------------------------------------------------------------------------
 // ScoringError
@@ -51,11 +39,9 @@ export const GeoScoreSchema = z.object({
 export type GeoScoreOutput = z.infer<typeof GeoScoreSchema>;
 
 // ---------------------------------------------------------------------------
-// GEO_SCORING_RUBRIC — static system block (the prompt-cached prefix)
+// GEO_SCORING_RUBRIC — static scoring rubric
 //
-// This string is stable and static across all scoring calls. It carries
-// cache_control:{type:'ephemeral'} and is the cached prefix proven by
-// usage.cache_creation_input_tokens / usage.cache_read_input_tokens metadata.
+// This string is stable and static across all scoring calls.
 // Do NOT include any dynamic per-job content here.
 // ---------------------------------------------------------------------------
 
@@ -235,152 +221,10 @@ Example findings structure (adapt based on actual findings data):
 `.trim();
 
 // ---------------------------------------------------------------------------
-// record_geo_score tool definition
+// ScoreResult
 // ---------------------------------------------------------------------------
-
-const RECORD_GEO_SCORE_TOOL: Anthropic.Tool = {
-  name: "record_geo_score",
-  description:
-    "Record the GEO score and per-dimension findings for the audited page. " +
-    "Call this tool exactly once with the computed score (0–100 integer) and " +
-    "a findings object containing per-dimension sub-scores and rationale.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      score: {
-        type: "integer",
-        minimum: 0,
-        maximum: 100,
-        description: "Overall GEO readiness score, 0 (worst) to 100 (best)",
-      },
-      findings: {
-        type: "object",
-        description:
-          "Per-dimension assessments. Keys are dimension names; values contain " +
-          "points, maxPoints, rationale, and keySignals.",
-        additionalProperties: true,
-      },
-    },
-    required: ["score", "findings"],
-  },
-};
-
-// ---------------------------------------------------------------------------
-// classifyScoringError — maps SDK error types to ScoringError
-// ---------------------------------------------------------------------------
-
-export function classifyScoringError(err: unknown): ScoringError {
-  if (err instanceof Anthropic.APIConnectionTimeoutError) {
-    return new ScoringError("SCORING_TIMEOUT", true);
-  }
-  if (err instanceof Anthropic.APIUserAbortError) {
-    return new ScoringError("SCORING_TIMEOUT", true);
-  }
-  if (err instanceof Anthropic.APIConnectionError) {
-    return new ScoringError("SCORING_API_ERROR", true);
-  }
-  if (err instanceof Anthropic.RateLimitError) {
-    return new ScoringError("SCORING_RATE_LIMITED", true);
-  }
-  if (err instanceof Anthropic.InternalServerError) {
-    return new ScoringError("SCORING_API_ERROR", true);
-  }
-  if (err instanceof Anthropic.APIError) {
-    return new ScoringError("SCORING_API_ERROR", err.status >= 500);
-  }
-  return new ScoringError("SCORING_API_ERROR", false);
-}
-
-// ---------------------------------------------------------------------------
-// createScorer — factory returning the score() function
-// ---------------------------------------------------------------------------
-
-export interface ScorerOptions {
-  model: string;
-  timeoutMs: number;
-}
 
 export interface ScoreResult {
   score: number;
   findings: Record<string, unknown>;
-  usage: Anthropic.Usage;
-}
-
-export function createScorer(
-  client: AnthropicMessagesClient,
-  opts: ScorerOptions,
-) {
-  return {
-    async score(
-      findings: FindingsShape,
-      externalSignal?: AbortSignal,
-    ): Promise<ScoreResult> {
-      const ac = new AbortController();
-
-      // Link external signal (lease-loss abort) to our controller
-      if (externalSignal?.aborted) {
-        ac.abort();
-      } else if (externalSignal) {
-        externalSignal.addEventListener("abort", () => ac.abort(), {
-          once: true,
-        });
-      }
-
-      const timer = setTimeout(() => ac.abort(), opts.timeoutMs);
-
-      try {
-        const response = await client.messages.create(
-          {
-            model: opts.model,
-            max_tokens: 1024,
-            system: [
-              {
-                type: "text",
-                text: GEO_SCORING_RUBRIC,
-                cache_control: { type: "ephemeral" },
-              },
-            ],
-            tools: [RECORD_GEO_SCORE_TOOL],
-            tool_choice: { type: "tool", name: "record_geo_score" },
-            messages: [
-              {
-                role: "user",
-                content: JSON.stringify(findings),
-              },
-            ],
-          },
-          { signal: ac.signal },
-        );
-
-        // Extract tool_use block
-        const toolUseBlock = response.content.find(
-          (b) => b.type === "tool_use",
-        );
-        if (!toolUseBlock || toolUseBlock.type !== "tool_use") {
-          throw new ScoringError("SCORING_MALFORMED_OUTPUT", true);
-        }
-
-        // zod-validate the tool_use input
-        const parsed = GeoScoreSchema.safeParse(toolUseBlock.input);
-        if (!parsed.success) {
-          throw new ScoringError("SCORING_MALFORMED_OUTPUT", true);
-        }
-
-        return {
-          score: parsed.data.score,
-          findings: parsed.data.findings,
-          usage: response.usage,
-        };
-      } catch (err) {
-        // Re-throw ScoringErrors directly (SCORING_MALFORMED_OUTPUT from above)
-        if (err instanceof ScoringError) {
-          throw err;
-        }
-        // Classify and rethrow SDK errors
-        throw classifyScoringError(err);
-      } finally {
-        clearTimeout(timer);
-      }
-    },
-  };
 }

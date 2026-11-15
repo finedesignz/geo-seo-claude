@@ -1,15 +1,15 @@
 /**
  * Wave 0 scaffold tests.
  *
- * (a) assertEnv() fail-fast: throws on missing ANTHROPIC_API_KEY, throws on
- *     missing DATABASE_URL, passes when both are set.
+ * (a) assertEnv() fail-fast: throws on missing DATABASE_URL; SCORING_PROVIDER=api
+ *     throws (API-key mode was removed); unset resolves to cli.
  * (b) Compile-time conformance: WorkerOptions references AuditDal (from @geo/db)
  *     and Fetcher (from @geo/core) — if those types diverge, tsc fails here first.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { assertEnv, resolveScoringProvider } from "../env.js";
-import type { WorkerOptions, AnthropicMessagesClient } from "../types.js";
+import type { WorkerOptions } from "../types.js";
 import type { AuditDal } from "@geo/db";
 import type { Fetcher } from "@geo/core";
 
@@ -37,50 +37,37 @@ describe("assertEnv", () => {
     }
   });
 
-  it("api provider: throws when ANTHROPIC_API_KEY is missing", () => {
-    delete process.env["ANTHROPIC_API_KEY"];
-    process.env["DATABASE_URL"] = "postgres://localhost/test";
-    expect(() => assertEnv("api")).toThrow("ANTHROPIC_API_KEY");
-  });
-
-  it("api provider: throws when DATABASE_URL is missing", () => {
-    process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
+  it("requires DATABASE_URL", () => {
+    process.env["CLAUDE_CODE_OAUTH_TOKEN"] = "oat-test";
     delete process.env["DATABASE_URL"];
-    expect(() => assertEnv("api")).toThrow("DATABASE_URL");
+    expect(() => assertEnv()).toThrow("DATABASE_URL");
   });
 
-  it("api provider: does not throw when both vars are set", () => {
-    process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
-    process.env["DATABASE_URL"] = "postgres://localhost/test";
-    expect(() => assertEnv("api")).not.toThrow();
-  });
-
-  it("cli provider: does not require ANTHROPIC_API_KEY", () => {
+  it("does not throw with DATABASE_URL set and no ANTHROPIC_API_KEY", () => {
     delete process.env["ANTHROPIC_API_KEY"];
     process.env["CLAUDE_CODE_OAUTH_TOKEN"] = "oat-test";
     process.env["DATABASE_URL"] = "postgres://localhost/test";
-    expect(() => assertEnv("cli")).not.toThrow();
+    expect(() => assertEnv()).not.toThrow();
   });
 
-  it("cli provider: still requires DATABASE_URL", () => {
-    delete process.env["ANTHROPIC_API_KEY"];
-    process.env["CLAUDE_CODE_OAUTH_TOKEN"] = "oat-test";
-    delete process.env["DATABASE_URL"];
-    expect(() => assertEnv("cli")).toThrow("DATABASE_URL");
-  });
-
-  it("resolveScoringProvider: defaults to api with a key, cli without", () => {
+  it("resolveScoringProvider: unset resolves to cli even when ANTHROPIC_API_KEY is set", () => {
     delete process.env["SCORING_PROVIDER"];
     process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
-    expect(resolveScoringProvider()).toBe("api");
-    delete process.env["ANTHROPIC_API_KEY"];
     expect(resolveScoringProvider()).toBe("cli");
   });
 
-  it("resolveScoringProvider: explicit value wins; bad value throws", () => {
+  it("resolveScoringProvider: explicit cli resolves to cli", () => {
     process.env["SCORING_PROVIDER"] = "cli";
-    process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
     expect(resolveScoringProvider()).toBe("cli");
+  });
+
+  it("resolveScoringProvider: api throws the removal error", () => {
+    process.env["SCORING_PROVIDER"] = "api";
+    expect(() => resolveScoringProvider()).toThrow(/"api" was removed/);
+    expect(() => assertEnv()).toThrow(/only "cli" is supported/);
+  });
+
+  it("resolveScoringProvider: unknown value throws", () => {
     process.env["SCORING_PROVIDER"] = "bogus";
     expect(() => resolveScoringProvider()).toThrow("SCORING_PROVIDER");
   });
@@ -102,7 +89,6 @@ describe("type conformance (compile-time)", () => {
       body: "",
       redirectChain: [],
     });
-    const stubAnthropic = {} as AnthropicMessagesClient;
 
     // WorkerOptions literal — tsc verifies field types match.
     const _opts: WorkerOptions = {
@@ -115,7 +101,7 @@ describe("type conformance (compile-time)", () => {
       shutdownGraceMs: 5000,
       scoringModel: "claude-opus-4-5",
       dal: stubDal,
-      anthropic: stubAnthropic,
+      scorer: { score: async () => ({ score: 0, findings: {} }) },
       fetcherFactory: () => stubFetcher,
     };
 

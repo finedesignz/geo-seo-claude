@@ -586,3 +586,23 @@ The following discrepancies were found between `geo/SKILL.md` and the `skills/` 
 - **`/geo quick`**: Listed in `geo/SKILL.md` and referenced throughout the codebase (by `geo-prospect` and `geo-compare`), but there is no `skills/geo-quick/SKILL.md`. The quick-scan behavior is documented only through the orchestration instructions in `geo/SKILL.md` and the `geo-prospect` skill. This command is documented above based on those references.
 - **`/geo page`**: Listed in `geo/SKILL.md`'s quick reference table (as `/geo page <url>` — deep single-page GEO analysis) and in the output files table (produces `GEO-PAGE-ANALYSIS.md`), but there is no `skills/geo-page/SKILL.md`. No implementation exists. This command is **not documented** in the reference above because there is no skill file to draw from.
 - **`/geo quick` in original `docs/commands-reference.md`**: The old table listed `/geo quick` but `geo/SKILL.md` does not list it in the sub-skills table (only in the quick reference table). It is referenced as a real behavior in the prospect and compare skills, so it is retained above.
+
+## TypeScript workspace checks
+
+After building workspace dependencies in order (`core`, `db`, `fetch`, `api`,
+`cron`, `worker`), run `tsc --noEmit` from each package directory. With the
+installed workspace dependencies, the equivalent command from the repository
+root is `node packages/<package>/node_modules/typescript/bin/tsc --noEmit --project packages/<package>/tsconfig.json`.
+
+This checks each package's configured files, separately from `tsup`'s production
+entry-point declaration build. The existing API and cron configs exclude some
+tests/helpers, so their default checks are not full test-source coverage. Run
+both checks and the workspace test suites.
+For `fetch` and `worker`, the default `tsconfig.json` is a no-emit checking
+configuration: it includes every source test, plus fetch's test helpers, and
+allows imported cross-package test fixtures. Neither excludes failing tests.
+Their `tsconfig.build.json` retains the production compiler settings and
+`src` root; `tsup.config.ts` selects it explicitly, preserving the package's
+`dist` entry points. The existing fetch `tsconfig.check.json` remains a
+compatible alternative to its default check. Compiler strictness is shared
+through inheritance, not relaxed for tests.

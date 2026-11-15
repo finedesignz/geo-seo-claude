@@ -39,8 +39,7 @@ if (!hasRealDb()) {
 }
 
 describeIfRealDb("WORK-01: true concurrent claimNextJob — no double-claim", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let sql: any;
+  let sql: import("postgres").Sql;
 
   beforeAll(async () => {
     const url = process.env["DATABASE_URL"]!;
@@ -60,9 +59,10 @@ describeIfRealDb("WORK-01: true concurrent claimNextJob — no double-claim", ()
     try {
       await runMigrations(
         {
-          exec: (s: string) => migrationSql.unsafe(s),
-          query: <T extends Record<string, unknown>>(s: string, p?: unknown[]) =>
-            migrationSql.unsafe(s, p ?? []) as Promise<T[]>,
+          exec: async (s: string): Promise<void> => {
+            await migrationSql.unsafe(s);
+          },
+          query: makePgExecutor(migrationSql).query,
         },
         MIGRATIONS_DIR,
       );

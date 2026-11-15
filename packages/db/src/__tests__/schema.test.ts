@@ -172,7 +172,7 @@ describe("audits schema (DATA-01)", () => {
       [row!.id],
     );
 
-    const updated = await db.query<{ updated_at: string }>(
+    const updated = await db.query<{ updated_at: string | Date }>(
       "SELECT updated_at FROM audits WHERE id = $1",
       [row!.id],
     );
